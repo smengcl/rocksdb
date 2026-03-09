@@ -1,0 +1,129 @@
+name: rocksdbjni-fatjar
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/rocksdbjni-fatjar.yml"
+      - "Makefile"
+      - "java/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux-classifiers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      DEBUG_LEVEL: 0
+      J: "100%"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Release Mode
+        run: test "${DEBUG_LEVEL}" = "0"
+      - name: Build Linux Classifiers
+        run: |
+          set -euxo pipefail
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86_64
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86musl
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86_64musl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdbjni-linux-classifiers
+          if-no-files-found: error
+          path: |
+            java/target/librocksdbjni-linux*.so
+            java/target/rocksdbjni-*-linux*.jar
+            java/target/rocksdbjni-*-linux*.jar.sha1
+
+  build-osx-classifier:
+    runs-on: macos-14
+    timeout-minutes: 240
+    env:
+      DEBUG_LEVEL: 0
+      J: "100%"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+      - name: Verify Release Mode
+        run: test "${DEBUG_LEVEL}" = "0"
+      - name: Build OSX Classifier
+        run: |
+          set -euxo pipefail
+          java -version
+          javac -version
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticosx
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdbjni-osx-classifier
+          if-no-files-found: error
+          path: |
+            java/target/librocksdbjni-osx*.jnilib
+            java/target/rocksdbjni-*-osx.jar
+            java/target/rocksdbjni-*-osx.jar.sha1
+
+  assemble-fat-jar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs:
+      - build-linux-classifiers
+      - build-osx-classifier
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocksdbjni-linux-classifiers
+          path: artifacts/linux
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocksdbjni-osx-classifier
+          path: artifacts/osx
+      - name: Assemble Fat Jar
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BASE_JAR="$(ls artifacts/linux/rocksdbjni-*-linux64.jar | head -n1)"
+          VERSION="$(basename "${BASE_JAR}" | sed -E 's/^rocksdbjni-(.+)-linux64\.jar$/\1/')"
+          FAT_JAR="rocksdbjni-${VERSION}.jar"
+
+          cp "${BASE_JAR}" "${FAT_JAR}"
+          jar uf "${FAT_JAR}" \
+            -C artifacts/linux librocksdbjni-linux32.so \
+            -C artifacts/linux librocksdbjni-linux64.so \
+            -C artifacts/linux librocksdbjni-linux32-musl.so \
+            -C artifacts/linux librocksdbjni-linux64-musl.so \
+            -C artifacts/osx librocksdbjni-osx-arm64.jnilib \
+            -C artifacts/osx librocksdbjni-osx-x86_64.jnilib
+
+          openssl sha1 "${FAT_JAR}" | sed 's/.*= \([0-9a-f]*\)/\1/' > "${FAT_JAR}.sha1"
+
+          mkdir -p output
+          mv "${FAT_JAR}" "${FAT_JAR}.sha1" output/
+          cp artifacts/linux/rocksdbjni-*-linux*.jar output/
+          cp artifacts/linux/rocksdbjni-*-linux*.jar.sha1 output/
+          cp artifacts/osx/rocksdbjni-*-osx.jar output/
+          cp artifacts/osx/rocksdbjni-*-osx.jar.sha1 output/
+      - name: Verify Fat Jar Content
+        shell: bash
+        run: |
+          set -euxo pipefail
+          FAT_JAR="$(ls output/rocksdbjni-*.jar | grep -vE -- '-(linux|osx)\.jar$' | head -n1)"
+          jar tf "${FAT_JAR}" | grep -q 'librocksdbjni-linux32\.so'
+          jar tf "${FAT_JAR}" | grep -q 'librocksdbjni-linux64\.so'
+          jar tf "${FAT_JAR}" | grep -q 'librocksdbjni-linux32-musl\.so'
+          jar tf "${FAT_JAR}" | grep -q 'librocksdbjni-linux64-musl\.so'
+          jar tf "${FAT_JAR}" | grep -q 'librocksdbjni-osx-arm64\.jnilib'
+          jar tf "${FAT_JAR}" | grep -q 'librocksdbjni-osx-x86_64\.jnilib'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdbjni-fatjar
+          if-no-files-found: error
+          path: output/
