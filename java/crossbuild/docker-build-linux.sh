@@ -37,47 +37,165 @@ rm -rf /rocksdb-local-build/*
 cp -r /rocksdb-host/* /rocksdb-local-build
 cd /rocksdb-local-build
 
-# Optional cross-compilation mode, currently used for arm64 host building x86_64-musl artifacts.
+# Optional cross-compilation mode for building Linux JNI artifacts from an arm64 host.
 if [ -n "${ROCKSDB_CROSS_TRIPLE}" ]; then
   case "${ROCKSDB_CROSS_TRIPLE}" in
+    x86-linux-gnu)
+      CROSS_SYSTEM_PROCESSOR=x86
+      CROSS_TARGET_ARCHITECTURE=x86
+      CROSS_MACHINE=x86
+      CROSS_ARCH=32
+      CROSS_JNI_LIBC=
+      CROSS_ZIG_CPU=
+      CROSS_ZIG_STRIP_MARCH=
+      ;;
+    x86-linux-musl)
+      CROSS_SYSTEM_PROCESSOR=x86
+      CROSS_TARGET_ARCHITECTURE=x86
+      CROSS_MACHINE=x86
+      CROSS_ARCH=32
+      CROSS_JNI_LIBC=musl
+      CROSS_ZIG_CPU=
+      CROSS_ZIG_STRIP_MARCH=
+      ;;
+    x86_64-linux-gnu)
+      CROSS_SYSTEM_PROCESSOR=x86_64
+      CROSS_TARGET_ARCHITECTURE=x86_64
+      CROSS_MACHINE=x86_64
+      CROSS_ARCH=64
+      CROSS_JNI_LIBC=
+      CROSS_ZIG_CPU=
+      CROSS_ZIG_STRIP_MARCH=
+      ;;
     x86_64-linux-musl)
-      echo "Configuring cross-compile toolchain for ${ROCKSDB_CROSS_TRIPLE}"
-
-      if ! hash zig 2>/dev/null; then
-        if hash apk 2>/dev/null; then
-          apk add --no-cache zig
-        else
-          echo "zig is required for ROCKSDB_CROSS_TRIPLE=${ROCKSDB_CROSS_TRIPLE}"
-          exit 1
-        fi
-      fi
-
-      CROSS_WRAPPERS_DIR=/tmp/rocksdb-zig-cross
-      mkdir -p "${CROSS_WRAPPERS_DIR}"
-
-      cat > "${CROSS_WRAPPERS_DIR}/cc" <<'EOF'
-#!/usr/bin/env sh
-exec zig cc -target x86_64-linux-musl "$@"
-EOF
-
-      cat > "${CROSS_WRAPPERS_DIR}/cxx" <<'EOF'
-#!/usr/bin/env sh
-exec zig c++ -target x86_64-linux-musl "$@"
-EOF
-
-      chmod +x "${CROSS_WRAPPERS_DIR}/cc" "${CROSS_WRAPPERS_DIR}/cxx"
-      export CC="${CROSS_WRAPPERS_DIR}/cc"
-      export CXX="${CROSS_WRAPPERS_DIR}/cxx"
-      export TARGET_ARCHITECTURE=x86_64
-      export MACHINE=x86_64
-      export JNI_LIBC=musl
-      export PLATFORM_CMAKE_FLAGS="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=x86_64 -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY"
+      CROSS_SYSTEM_PROCESSOR=x86_64
+      CROSS_TARGET_ARCHITECTURE=x86_64
+      CROSS_MACHINE=x86_64
+      CROSS_ARCH=64
+      CROSS_JNI_LIBC=musl
+      CROSS_ZIG_CPU=
+      CROSS_ZIG_STRIP_MARCH=
+      ;;
+    powerpc64le-linux-gnu)
+      CROSS_SYSTEM_PROCESSOR=ppc64le
+      CROSS_TARGET_ARCHITECTURE=ppc64le
+      CROSS_MACHINE=ppc64le
+      CROSS_ARCH=64
+      CROSS_JNI_LIBC=
+      CROSS_ZIG_CPU=
+      CROSS_ZIG_STRIP_MARCH=
+      ;;
+    powerpc64le-linux-musl)
+      CROSS_SYSTEM_PROCESSOR=ppc64le
+      CROSS_TARGET_ARCHITECTURE=ppc64le
+      CROSS_MACHINE=ppc64le
+      CROSS_ARCH=64
+      CROSS_JNI_LIBC=musl
+      CROSS_ZIG_CPU=
+      CROSS_ZIG_STRIP_MARCH=
+      ;;
+    s390x-linux-gnu)
+      CROSS_SYSTEM_PROCESSOR=s390x
+      CROSS_TARGET_ARCHITECTURE=s390x
+      CROSS_MACHINE=s390x
+      CROSS_ARCH=64
+      CROSS_JNI_LIBC=
+      CROSS_ZIG_CPU=arch8
+      CROSS_ZIG_STRIP_MARCH=
+      ;;
+    s390x-linux-musl)
+      CROSS_SYSTEM_PROCESSOR=s390x
+      CROSS_TARGET_ARCHITECTURE=s390x
+      CROSS_MACHINE=s390x
+      CROSS_ARCH=64
+      CROSS_JNI_LIBC=musl
+      CROSS_ZIG_CPU=arch8
+      CROSS_ZIG_STRIP_MARCH=
+      ;;
+    riscv64-linux-gnu)
+      CROSS_SYSTEM_PROCESSOR=riscv64
+      CROSS_TARGET_ARCHITECTURE=riscv64
+      CROSS_MACHINE=riscv64
+      CROSS_ARCH=64
+      CROSS_JNI_LIBC=
+      CROSS_ZIG_CPU=generic_rv64+d+f+c+m+a
+      CROSS_ZIG_STRIP_MARCH=rv64gc
+      ;;
+    riscv64-linux-musl)
+      CROSS_SYSTEM_PROCESSOR=riscv64
+      CROSS_TARGET_ARCHITECTURE=riscv64
+      CROSS_MACHINE=riscv64
+      CROSS_ARCH=64
+      CROSS_JNI_LIBC=musl
+      CROSS_ZIG_CPU=generic_rv64+d+f+c+m+a
+      CROSS_ZIG_STRIP_MARCH=rv64gc
       ;;
     *)
       echo "Unsupported ROCKSDB_CROSS_TRIPLE: ${ROCKSDB_CROSS_TRIPLE}"
       exit 1
       ;;
   esac
+
+  echo "Configuring cross-compile toolchain for ${ROCKSDB_CROSS_TRIPLE}"
+
+  ROCKSDB_ZIG_VERSION="${ROCKSDB_ZIG_VERSION:-0.15.2}"
+  ROCKSDB_ZIG_ROOT="/tmp/zig-aarch64-linux-${ROCKSDB_ZIG_VERSION}"
+  ROCKSDB_ZIG_URL="${ROCKSDB_ZIG_URL:-https://ziglang.org/download/${ROCKSDB_ZIG_VERSION}/zig-aarch64-linux-${ROCKSDB_ZIG_VERSION}.tar.xz}"
+
+  if [ ! -x "${ROCKSDB_ZIG_ROOT}/zig" ]; then
+    if hash apk 2>/dev/null; then
+      apk add --no-cache curl xz
+    else
+      echo "curl and xz are required to fetch Zig ${ROCKSDB_ZIG_VERSION}"
+      exit 1
+    fi
+
+    curl -fsSL "${ROCKSDB_ZIG_URL}" -o "/tmp/zig-aarch64-linux-${ROCKSDB_ZIG_VERSION}.tar.xz"
+    tar -C /tmp -xf "/tmp/zig-aarch64-linux-${ROCKSDB_ZIG_VERSION}.tar.xz"
+  fi
+
+  CROSS_WRAPPERS_DIR=/tmp/rocksdb-zig-cross
+  mkdir -p "${CROSS_WRAPPERS_DIR}"
+
+  cat > "${CROSS_WRAPPERS_DIR}/cc" <<EOF
+#!/usr/bin/env bash
+strip_march="${CROSS_ZIG_STRIP_MARCH}"
+args=()
+for arg in "\$@"; do
+  if [ -n "\${strip_march}" ] && { [ "\$arg" = "-march=\${strip_march}" ] || [ "\$arg" = "-mcpu=\${strip_march}" ]; }; then
+    continue
+  fi
+  args+=("\$arg")
+done
+exec "${ROCKSDB_ZIG_ROOT}/zig" cc -target ${ROCKSDB_CROSS_TRIPLE} ${CROSS_ZIG_CPU:+-mcpu=${CROSS_ZIG_CPU}} "\${args[@]}"
+EOF
+
+  cat > "${CROSS_WRAPPERS_DIR}/cxx" <<EOF
+#!/usr/bin/env bash
+strip_march="${CROSS_ZIG_STRIP_MARCH}"
+args=()
+for arg in "\$@"; do
+  if [ -n "\${strip_march}" ] && { [ "\$arg" = "-march=\${strip_march}" ] || [ "\$arg" = "-mcpu=\${strip_march}" ]; }; then
+    continue
+  fi
+  args+=("\$arg")
+done
+exec "${ROCKSDB_ZIG_ROOT}/zig" c++ -target ${ROCKSDB_CROSS_TRIPLE} ${CROSS_ZIG_CPU:+-mcpu=${CROSS_ZIG_CPU}} "\${args[@]}"
+EOF
+
+  chmod +x "${CROSS_WRAPPERS_DIR}/cc" "${CROSS_WRAPPERS_DIR}/cxx"
+  export CC="${CROSS_WRAPPERS_DIR}/cc"
+  export CXX="${CROSS_WRAPPERS_DIR}/cxx"
+  export TARGET_ARCHITECTURE="${CROSS_TARGET_ARCHITECTURE}"
+  export MACHINE="${CROSS_MACHINE}"
+  export ARCH="${CROSS_ARCH}"
+  export ROCKSDB_CROSS_LIBC="${CROSS_JNI_LIBC:-gnu}"
+  if [ -n "${CROSS_JNI_LIBC}" ]; then
+    export JNI_LIBC="${CROSS_JNI_LIBC}"
+  else
+    unset JNI_LIBC
+  fi
+  export PLATFORM_CMAKE_FLAGS="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=${CROSS_SYSTEM_PROCESSOR} -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY"
 fi
 
 # Keep the historical GCC workaround for regular builds, and use clang-safe flags for zig cross builds.
