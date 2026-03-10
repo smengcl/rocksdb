@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build-linux-core:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 240
     env:
       DEBUG_LEVEL: 0
@@ -77,14 +77,13 @@ jobs:
             java/target/librocksdbjni-linux-aarch64-musl.so
 
   build-linux-emulated:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 300
     env:
       DEBUG_LEVEL: 0
       J: "100%"
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
       - name: Verify Release Mode
         run: |
           set -euxo pipefail
@@ -143,7 +142,7 @@ jobs:
             java/target/rocksdbjni-*-osx.jar.sha1
 
   build-win64-mingw:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 180
     env:
       CMAKE_BUILD_TYPE: Release
