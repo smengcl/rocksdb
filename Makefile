@@ -16,7 +16,8 @@ CXXFLAGS += ${EXTRA_CXXFLAGS}
 LDFLAGS += $(EXTRA_LDFLAGS)
 MACHINE ?= $(shell uname -m)
 ARFLAGS = ${EXTRA_ARFLAGS} rs
-STRIPFLAGS = -S -x
+STRIP ?= strip
+STRIPFLAGS ?= -S -x
 
 # Transform parallel LOG output into something more readable.
 perl_command = perl -n \
@@ -2303,6 +2304,8 @@ else
 JAR_CMD := jar
 endif
 endif
+
+CMAKE ?= cmake
 rocksdbjavastatic_javalib:
 	# Build JNI headers from both main and test Java sources; javadocs are not required for JNI packaging.
 	cd java; $(MAKE) java java_test
@@ -2312,8 +2315,8 @@ rocksdbjavastatic_javalib:
 	  -o ./java/target/$(ROCKSDBJNILIB) $(JNI_NATIVE_OBJECTS) \
 	  $(LIB_OBJECTS) $(COVERAGEFLAGS) \
 	  $(JAVA_COMPRESSIONS) $(JAVA_STATIC_LDFLAGS)
-	cd java/target;if [ "$(DEBUG_LEVEL)" == "0" ] && [ -z "$(ROCKSDB_CROSS_TRIPLE)" ]; then \
-		strip $(STRIPFLAGS) $(ROCKSDBJNILIB); \
+	cd java/target;if [ "$(DEBUG_LEVEL)" == "0" ]; then \
+		$(STRIP) $(STRIPFLAGS) $(ROCKSDBJNILIB); \
 	fi
 
 rocksdbjava_jar:
@@ -2344,14 +2347,96 @@ rocksdbjavastaticrelease: rocksdbjavastaticosx rocksdbjava_javadocs_jar rocksdbj
 	cd java/target/classes; $(JAR_CMD) -uf ../$(ROCKSDB_JAR_ALL) org/rocksdb/*.class org/rocksdb/util/*.class
 	openssl sha1 java/target/$(ROCKSDB_JAR_ALL) | sed 's/.*= \([0-9a-f]*\)/\1/' > java/target/$(ROCKSDB_JAR_ALL).sha1
 
-rocksdbjavastaticreleasedocker: rocksdbjavastaticosx rocksdbjavastaticdockerx86 rocksdbjavastaticdockerx86_64 rocksdbjavastaticdockerarm64v8 rocksdbjavastaticdockerppc64le rocksdbjavastaticdockers390x rocksdbjavastaticdockerriscv64 rocksdbjavastaticdockerx86musl rocksdbjavastaticdockerx86_64musl rocksdbjavastaticdockerarm64v8musl rocksdbjavastaticdockerppc64lemusl rocksdbjavastaticdockers390xmusl rocksdbjava_javadocs_jar rocksdbjava_sources_jar
+ROCKSDB_JAVA_FATJAR_NATIVE_LIBS = \
+	librocksdbjni-linux32.so \
+	librocksdbjni-linux64.so \
+	librocksdbjni-linux32-musl.so \
+	librocksdbjni-linux64-musl.so \
+	librocksdbjni-linux-aarch64.so \
+	librocksdbjni-linux-aarch64-musl.so \
+	librocksdbjni-linux-ppc64le.so \
+	librocksdbjni-linux-ppc64le-musl.so \
+	librocksdbjni-linux-s390x.so \
+	librocksdbjni-linux-s390x-musl.so \
+	librocksdbjni-linux-riscv64.so \
+	librocksdbjni-osx-arm64.jnilib \
+	librocksdbjni-osx-x86_64.jnilib \
+	librocksdbjni-win64.dll
+
+ROCKSDB_JAVA_WIN64_BUILD_DIR ?= build-mingw
+ROCKSDB_JAVA_WIN64_CMAKE_FLAGS ?= \
+	-DJNI=1 \
+	-DWITH_GFLAGS=OFF \
+	-DBUILD_SHARED_LIBS=ON \
+	-DROCKSDB_BUILD_SHARED=ON \
+	-DPORTABLE=1 \
+	-DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
+	-DCMAKE_SYSTEM_NAME=Windows \
+	-DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+	-DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
+	-DCMAKE_C_FLAGS=-Wno-error=maybe-uninitialized \
+	-DCMAKE_CXX_FLAGS=-Wno-error=maybe-uninitialized
+
+ROCKSDB_JAVA_FATJAR_BUILD_TARGETS = \
+	rocksdbjavastaticosx \
+	rocksdbjavastaticdockerx86 \
+	rocksdbjavastaticdockerx86_64 \
+	rocksdbjavastaticdockerarm64v8 \
+	rocksdbjavastaticdockerppc64le \
+	rocksdbjavastaticdockers390x \
+	rocksdbjavastaticdockerriscv64 \
+	rocksdbjavastaticdockerx86musl \
+	rocksdbjavastaticdockerx86_64musl \
+	rocksdbjavastaticdockerarm64v8musl \
+	rocksdbjavastaticdockerppc64lemusl \
+	rocksdbjavastaticdockers390xmusl \
+	rocksdbjavastaticwin64 \
+	rocksdbjava_javadocs_jar \
+	rocksdbjava_sources_jar
+
+rocksdbjavastaticfatjarassemble:
+	cd java; $(MAKE) java
+	@for native in $(ROCKSDB_JAVA_FATJAR_NATIVE_LIBS); do \
+		test -f "java/target/$$native" || { echo "Missing fat-jar native: $$native"; exit 1; }; \
+	done
 	cd java; $(JAR_CMD) -cf target/$(ROCKSDB_JAR_ALL) HISTORY*.md
-	cd java/target; \
-		JAR_FILES="librocksdbjni-*.so librocksdbjni-*.jnilib"; \
-		if ls librocksdbjni-*.dll >/dev/null 2>&1; then JAR_FILES="$$JAR_FILES librocksdbjni-*.dll"; fi; \
-		$(JAR_CMD) -uf $(ROCKSDB_JAR_ALL) $$JAR_FILES
+	cd java/target; $(JAR_CMD) -uf $(ROCKSDB_JAR_ALL) $(ROCKSDB_JAVA_FATJAR_NATIVE_LIBS)
 	cd java/target/classes; $(JAR_CMD) -uf ../$(ROCKSDB_JAR_ALL) org/rocksdb/*.class org/rocksdb/util/*.class
 	openssl sha1 java/target/$(ROCKSDB_JAR_ALL) | sed 's/.*= \([0-9a-f]*\)/\1/' > java/target/$(ROCKSDB_JAR_ALL).sha1
+
+rocksdbjavastaticwin64: CMAKE_BUILD_TYPE=Release
+rocksdbjavastaticwin64:
+	@if [ -z "$(JAVA_HOME)" ]; then \
+		echo "JAVA_HOME must point to a JDK 8 installation"; \
+		exit 1; \
+	fi
+	@command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1 || { \
+		echo "x86_64-w64-mingw32-gcc not found; install mingw-w64 first"; \
+		exit 1; \
+	}
+	@command -v x86_64-w64-mingw32-g++ >/dev/null 2>&1 || { \
+		echo "x86_64-w64-mingw32-g++ not found; install mingw-w64 first"; \
+		exit 1; \
+	}
+	mkdir -p java/target
+	$(CMAKE) -S . -B $(ROCKSDB_JAVA_WIN64_BUILD_DIR) $(ROCKSDB_JAVA_WIN64_CMAKE_FLAGS)
+	$(CMAKE) --build $(ROCKSDB_JAVA_WIN64_BUILD_DIR) --target rocksdbjava -- -j"$$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+	@WIN64_DLL="$$(find $(ROCKSDB_JAVA_WIN64_BUILD_DIR) -type f -name 'librocksdbjni-win64.dll' | head -n1)"; \
+	WIN64_JAR="$$(find $(ROCKSDB_JAVA_WIN64_BUILD_DIR) -type f -name 'rocksdbjni-*-win64.jar' | head -n1)"; \
+	test -n "$$WIN64_DLL"; \
+	test -n "$$WIN64_JAR"; \
+	cp "$$WIN64_DLL" java/target/; \
+	cp "$$WIN64_JAR" java/target/; \
+	openssl sha1 "$$WIN64_JAR" | sed 's/.*= \([0-9a-f]*\)/\1/' > "java/target/$$(basename "$$WIN64_JAR").sha1"
+
+rocksdbjavastaticfatjar: DEBUG_LEVEL=0
+rocksdbjavastaticfatjar: CMAKE_BUILD_TYPE=Release
+rocksdbjavastaticfatjar:
+	$(MAKE) $(ROCKSDB_JAVA_FATJAR_BUILD_TARGETS)
+	$(MAKE) rocksdbjavastaticfatjarassemble
+
+rocksdbjavastaticreleasedocker:
+	$(MAKE) rocksdbjavastaticfatjar
 
 rocksdbjavastaticdockerx86:
 	mkdir -p java/target

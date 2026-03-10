@@ -144,9 +144,9 @@ if [ -n "${ROCKSDB_CROSS_TRIPLE}" ]; then
 
   if [ ! -x "${ROCKSDB_ZIG_ROOT}/zig" ]; then
     if hash apk 2>/dev/null; then
-      apk add --no-cache curl xz
+      apk add --no-cache curl xz elfutils
     else
-      echo "curl and xz are required to fetch Zig ${ROCKSDB_ZIG_VERSION}"
+      echo "curl, xz, and elfutils are required to fetch Zig ${ROCKSDB_ZIG_VERSION}"
       exit 1
     fi
 
@@ -189,6 +189,8 @@ EOF
   export TARGET_ARCHITECTURE="${CROSS_TARGET_ARCHITECTURE}"
   export MACHINE="${CROSS_MACHINE}"
   export ARCH="${CROSS_ARCH}"
+  export STRIP=eu-strip
+  export STRIPFLAGS=
   export ROCKSDB_CROSS_LIBC="${CROSS_JNI_LIBC:-gnu}"
   if [ -n "${CROSS_JNI_LIBC}" ]; then
     export JNI_LIBC="${CROSS_JNI_LIBC}"

@@ -1,32 +1,50 @@
 ## Cross-building
 
-RocksDB can be built as a single self contained cross-platform JAR. The cross-platform jar can be used on any 64-bit OSX system, 32-bit Linux system, or 64-bit Linux system.
+RocksDB can be built as a single self-contained fat JAR from the source tree.
 
-Building a cross-platform JAR requires:
+Building the fat JAR requires:
 
  * [Docker](https://www.docker.com/docker-community)
- * A Mac OSX machine that can compile RocksDB.
- * Java 7 set as JAVA_HOME.
+ * A macOS machine that can build the `osx` JNI libraries
+ * Java 8 set as `JAVA_HOME`
+ * `mingw-w64` installed for the `win64` JNI library
 
-Once you have these items, run this make command from RocksDB's root source directory:
+From RocksDB's root source directory, run:
 
-    make jclean clean rocksdbjavastaticreleasedocker
+    make jclean clean rocksdbjavastaticfatjar
 
-This command will build RocksDB natively on OSX, and will then spin up docker containers to build RocksDB for 32-bit and 64-bit Linux with glibc, and 32-bit and 64-bit Linux with musl libc.
+This is the supported one-command fat-jar build. It builds:
 
-You can find all native binaries and JARs in the java/target directory upon completion:
+ * macOS: `osx-arm64`, `osx-x86_64`
+ * Linux glibc: `linux32`, `linux64`, `linux-aarch64`, `linux-ppc64le`, `linux-s390x`, `linux-riscv64`
+ * Linux musl: `linux32-musl`, `linux64-musl`, `linux-aarch64-musl`, `linux-ppc64le-musl`, `linux-s390x-musl`
+ * Windows: `win64`
+
+For compatibility, `make rocksdbjavastaticreleasedocker` now delegates to the same fat-jar target.
+
+You can find the native binaries and JARs in `java/target` upon completion, including:
 
     librocksdbjni-linux32.so
     librocksdbjni-linux64.so
-    librocksdbjni-linux64-musl.so
     librocksdbjni-linux32-musl.so
-    librocksdbjni-osx.jnilib
+    librocksdbjni-linux64-musl.so
+    librocksdbjni-linux-aarch64.so
+    librocksdbjni-linux-aarch64-musl.so
+    librocksdbjni-linux-ppc64le.so
+    librocksdbjni-linux-ppc64le-musl.so
+    librocksdbjni-linux-s390x.so
+    librocksdbjni-linux-s390x-musl.so
+    librocksdbjni-linux-riscv64.so
+    librocksdbjni-osx-arm64.jnilib
+    librocksdbjni-osx-x86_64.jnilib
+    librocksdbjni-win64.dll
     rocksdbjni-x.y.z-javadoc.jar
     rocksdbjni-x.y.z-linux32.jar
     rocksdbjni-x.y.z-linux64.jar
-    rocksdbjni-x.y.z-linux64-musl.jar
     rocksdbjni-x.y.z-linux32-musl.jar
+    rocksdbjni-x.y.z-linux64-musl.jar
     rocksdbjni-x.y.z-osx.jar
+    rocksdbjni-x.y.z-win64.jar
     rocksdbjni-x.y.z-sources.jar
     rocksdbjni-x.y.z.jar
 

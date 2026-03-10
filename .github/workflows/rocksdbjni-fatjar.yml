@@ -145,6 +145,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
+      DEBUG_LEVEL: 0
       CMAKE_BUILD_TYPE: Release
     steps:
       - uses: actions/checkout@v4
@@ -167,32 +168,16 @@ jobs:
       - name: Build Win64 JNI Classifier (Release)
         run: |
           set -euxo pipefail
-          cmake -S . -B build-mingw \
-            -DJNI=1 \
-            -DWITH_GFLAGS=OFF \
-            -DBUILD_SHARED_LIBS=ON \
-            -DROCKSDB_BUILD_SHARED=ON \
-            -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
-            -DCMAKE_SYSTEM_NAME=Windows \
-            -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
-            -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++
-          cmake --build build-mingw --target rocksdbjava -- -j"$(nproc)"
-
-          WIN64_DLL="$(find build-mingw -type f -name 'librocksdbjni-win64.dll' | head -n1)"
-          WIN64_JAR="$(find build-mingw -type f -name 'rocksdbjni-*-win64.jar' | head -n1)"
-          test -n "${WIN64_DLL}"
-          test -n "${WIN64_JAR}"
-          jar tf "${WIN64_JAR}" | grep -Fx 'librocksdbjni-win64.dll'
-
-          mkdir -p output-win64
-          cp "${WIN64_DLL}" output-win64/
-          cp "${WIN64_JAR}" output-win64/
-          openssl sha1 "${WIN64_JAR}" | sed 's/.*= \([0-9a-f]*\)/\1/' > "output-win64/$(basename "${WIN64_JAR}").sha1"
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" rocksdbjavastaticwin64
+          jar tf java/target/rocksdbjni-*-win64.jar | grep -Fx 'librocksdbjni-win64.dll'
       - uses: actions/upload-artifact@v4
         with:
           name: rocksdbjni-win64
           if-no-files-found: error
-          path: output-win64/
+          path: |
+            java/target/librocksdbjni-win64.dll
+            java/target/rocksdbjni-*-win64.jar
+            java/target/rocksdbjni-*-win64.jar.sha1
 
   assemble-fat-jar:
     runs-on: ubuntu-24.04
@@ -204,6 +189,7 @@ jobs:
       - build-osx-classifier
       - build-win64-mingw
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -239,57 +225,41 @@ jobs:
             find "${root}" -type f -name "${name}" | head -n1
           }
 
-          BASE_JAR="$(find_one artifacts/linux-core 'rocksdbjni-*-linux64.jar')"
-          VERSION="$(basename "${BASE_JAR}" | sed -E 's/^rocksdbjni-(.+)-linux64\.jar$/\1/')"
-          FAT_JAR="rocksdbjni-${VERSION}.jar"
-          cp "${BASE_JAR}" "${FAT_JAR}"
+          mkdir -p java/target output
+          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux32.so')" java/target/
+          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux64.so')" java/target/
+          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux32-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux64-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-aarch64 'librocksdbjni-linux-aarch64.so')" java/target/
+          cp "$(find_one artifacts/linux-aarch64 'librocksdbjni-linux-aarch64-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-ppc64le.so')" java/target/
+          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-ppc64le-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-s390x.so')" java/target/
+          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-s390x-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-riscv64.so')" java/target/
+          cp "$(find_one artifacts/osx 'librocksdbjni-osx-arm64.jnilib')" java/target/
+          cp "$(find_one artifacts/osx 'librocksdbjni-osx-x86_64.jnilib')" java/target/
+          cp "$(find_one artifacts/win64 'librocksdbjni-win64.dll')" java/target/
 
-          mkdir -p stage output
-          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux32.so')" stage/
-          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux64.so')" stage/
-          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux32-musl.so')" stage/
-          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux64-musl.so')" stage/
-          cp "$(find_one artifacts/linux-aarch64 'librocksdbjni-linux-aarch64.so')" stage/
-          cp "$(find_one artifacts/linux-aarch64 'librocksdbjni-linux-aarch64-musl.so')" stage/
-          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-ppc64le.so')" stage/
-          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-ppc64le-musl.so')" stage/
-          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-s390x.so')" stage/
-          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-s390x-musl.so')" stage/
-          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-riscv64.so')" stage/
-          cp "$(find_one artifacts/osx 'librocksdbjni-osx-arm64.jnilib')" stage/
-          cp "$(find_one artifacts/osx 'librocksdbjni-osx-x86_64.jnilib')" stage/
-          cp "$(find_one artifacts/win64 'librocksdbjni-win64.dll')" stage/
-
-          jar uf "${FAT_JAR}" \
-            -C stage librocksdbjni-linux32.so \
-            -C stage librocksdbjni-linux64.so \
-            -C stage librocksdbjni-linux32-musl.so \
-            -C stage librocksdbjni-linux64-musl.so \
-            -C stage librocksdbjni-linux-aarch64.so \
-            -C stage librocksdbjni-linux-aarch64-musl.so \
-            -C stage librocksdbjni-linux-ppc64le.so \
-            -C stage librocksdbjni-linux-ppc64le-musl.so \
-            -C stage librocksdbjni-linux-s390x.so \
-            -C stage librocksdbjni-linux-s390x-musl.so \
-            -C stage librocksdbjni-linux-riscv64.so \
-            -C stage librocksdbjni-osx-arm64.jnilib \
-            -C stage librocksdbjni-osx-x86_64.jnilib \
-            -C stage librocksdbjni-win64.dll
+          make DEBUG_LEVEL=0 rocksdbjavastaticfatjarassemble
+          FAT_JAR="$(find java/target -maxdepth 1 -type f -name 'rocksdbjni-*.jar' ! -name '*-linux*.jar' ! -name '*-osx.jar' ! -name '*-win64.jar' ! -name '*-javadoc.jar' ! -name '*-sources.jar' | head -n1)"
+          test -n "${FAT_JAR}"
 
           # Validate native entry-name parity with 10.2.1.
           jar tf "${FAT_JAR}" | grep -E '^librocksdbjni-.*\.(so|jnilib|dll)$' | sort > actual-natives.txt
           curl -L -o rocksdbjni-10.2.1.jar https://repo1.maven.org/maven2/org/rocksdb/rocksdbjni/10.2.1/rocksdbjni-10.2.1.jar
           jar tf rocksdbjni-10.2.1.jar | grep -E '^librocksdbjni-.*\.(so|jnilib|dll)$' | sort > expected-natives.txt
           diff -u expected-natives.txt actual-natives.txt
+          test "$(wc -l < actual-natives.txt)" -eq 14
 
           # Validate binary formats.
-          file stage/librocksdbjni-linux64.so | grep -q 'ELF 64-bit'
-          file stage/librocksdbjni-linux-riscv64.so | grep -q 'ELF 64-bit'
-          file stage/librocksdbjni-win64.dll | grep -Eq 'PE32\+ executable|PE32\+ DLL'
-          readelf -h stage/librocksdbjni-linux64.so | grep -q 'Machine:'
+          file java/target/librocksdbjni-linux64.so | grep -q 'ELF 64-bit'
+          file java/target/librocksdbjni-linux-riscv64.so | grep -q 'ELF 64-bit'
+          file java/target/librocksdbjni-win64.dll | grep -Eq 'PE32\+ executable|PE32\+ DLL'
+          readelf -h java/target/librocksdbjni-linux64.so | grep -q 'Machine:'
 
-          openssl sha1 "${FAT_JAR}" | sed 's/.*= \([0-9a-f]*\)/\1/' > "${FAT_JAR}.sha1"
-          mv "${FAT_JAR}" "${FAT_JAR}.sha1" output/
+          cp "${FAT_JAR}" output/
+          cp "${FAT_JAR}.sha1" output/
 
           cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux32.jar')" output/
           cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux64.jar')" output/
