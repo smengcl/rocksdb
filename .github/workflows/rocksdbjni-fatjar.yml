@@ -145,12 +145,18 @@ jobs:
   build-win64-mingw:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    env:
+      CMAKE_BUILD_TYPE: Release
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "8"
+      - name: Verify Release Mode
+        run: |
+          set -euxo pipefail
+          test "${CMAKE_BUILD_TYPE}" = "Release"
       - name: Install Mingw Toolchain
         run: |
           set -euxo pipefail
@@ -167,7 +173,7 @@ jobs:
             -DWITH_GFLAGS=OFF \
             -DBUILD_SHARED_LIBS=ON \
             -DROCKSDB_BUILD_SHARED=ON \
-            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
             -DCMAKE_SYSTEM_NAME=Windows \
             -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
             -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++
