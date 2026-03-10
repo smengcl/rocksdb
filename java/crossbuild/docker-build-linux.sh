@@ -209,6 +209,12 @@ fi
 if [ -n "${ROCKSDB_CROSS_TRIPLE}" ]; then
   EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS} -Wno-error=unknown-warning-option -Wno-unknown-warning-option"
   EXTRA_CFLAGS="${EXTRA_CFLAGS} -Wno-error=unknown-warning-option -Wno-unknown-warning-option"
+  case "${ROCKSDB_CROSS_TRIPLE}" in
+    x86-linux-gnu|x86-linux-musl)
+      EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS} -Wno-error=shorten-64-to-32 -Wno-shorten-64-to-32"
+      EXTRA_CFLAGS="${EXTRA_CFLAGS} -Wno-error=shorten-64-to-32 -Wno-shorten-64-to-32"
+      ;;
+  esac
 else
   EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS} -Wno-error=restrict"
 fi
