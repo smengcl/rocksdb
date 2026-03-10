@@ -182,6 +182,7 @@ jobs:
           WIN64_JAR="$(find build-mingw -type f -name 'rocksdbjni-*-win64.jar' | head -n1)"
           test -n "${WIN64_DLL}"
           test -n "${WIN64_JAR}"
+          jar tf "${WIN64_JAR}" | grep -Fx 'librocksdbjni-win64.dll'
 
           mkdir -p output-win64
           cp "${WIN64_DLL}" output-win64/

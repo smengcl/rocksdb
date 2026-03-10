@@ -2068,6 +2068,7 @@ gen-pc:
 # Jni stuff
 # ---------------------------------------------------------------------------
 JAVA_INCLUDE = -I$(JAVA_HOME)/include/ -I$(JAVA_HOME)/include/linux
+ifeq ($(origin ARCH), undefined)
 ifeq ($(PLATFORM), OS_SOLARIS)
 	ARCH := $(shell isainfo -b)
 else ifeq ($(PLATFORM), OS_OPENBSD)
@@ -2078,6 +2079,7 @@ else ifeq ($(PLATFORM), OS_OPENBSD)
 	endif
 else
 	ARCH := $(shell getconf LONG_BIT)
+endif
 endif
 
 ifneq ($(origin ROCKSDB_CROSS_LIBC), undefined)

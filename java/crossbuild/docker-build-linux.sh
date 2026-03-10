@@ -211,8 +211,8 @@ if [ -n "${ROCKSDB_CROSS_TRIPLE}" ]; then
   EXTRA_CFLAGS="${EXTRA_CFLAGS} -Wno-error=unknown-warning-option -Wno-unknown-warning-option"
   case "${ROCKSDB_CROSS_TRIPLE}" in
     x86-linux-gnu|x86-linux-musl)
-      EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS} -Wno-error=shorten-64-to-32 -Wno-shorten-64-to-32"
-      EXTRA_CFLAGS="${EXTRA_CFLAGS} -Wno-error=shorten-64-to-32 -Wno-shorten-64-to-32"
+      EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS} -Wno-error=shorten-64-to-32 -Wno-shorten-64-to-32 -Wno-error=sync-alignment"
+      EXTRA_CFLAGS="${EXTRA_CFLAGS} -Wno-error=shorten-64-to-32 -Wno-shorten-64-to-32 -Wno-error=sync-alignment"
       ;;
   esac
 else
@@ -225,10 +225,11 @@ export EXTRA_CFLAGS
 validate_native_artifact() {
   local native_path="$1"
   local native_name
-  local file_output
-  local readelf_machine
   local file_pattern
   local readelf_pattern
+  local file_output
+  local readelf_machine
+  local checked_format=0
 
   native_name=$(basename "${native_path}")
   case "${native_name}" in
@@ -262,10 +263,13 @@ validate_native_artifact() {
       ;;
   esac
 
-  file_output=$(LC_ALL=C file -b "${native_path}")
-  if ! printf '%s\n' "${file_output}" | grep -Eq "${file_pattern}"; then
-    echo "Unexpected native format for ${native_name}: ${file_output}"
-    exit 1
+  if hash file 2>/dev/null; then
+    file_output=$(LC_ALL=C file -b "${native_path}")
+    if ! printf '%s\n' "${file_output}" | grep -Eq "${file_pattern}"; then
+      echo "Unexpected native format for ${native_name}: ${file_output}"
+      exit 1
+    fi
+    checked_format=1
   fi
 
   if hash readelf 2>/dev/null; then
@@ -274,6 +278,12 @@ validate_native_artifact() {
       echo "Unexpected ELF machine for ${native_name}: ${readelf_machine}"
       exit 1
     fi
+    checked_format=1
+  fi
+
+  if [ "${checked_format}" -eq 0 ]; then
+    echo "Neither file nor readelf is available to validate ${native_name}"
+    exit 1
   fi
 }
 
