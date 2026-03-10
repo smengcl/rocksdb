@@ -216,6 +216,71 @@ fi
 export EXTRA_CXXFLAGS
 export EXTRA_CFLAGS
 
+validate_native_artifact() {
+  local native_path="$1"
+  local native_name
+  local file_output
+  local readelf_machine
+  local file_pattern
+  local readelf_pattern
+
+  native_name=$(basename "${native_path}")
+  case "${native_name}" in
+    librocksdbjni-linux32.so|librocksdbjni-linux32-musl.so)
+      file_pattern='ELF 32-bit.*Intel 80386'
+      readelf_pattern='Intel 80386'
+      ;;
+    librocksdbjni-linux64.so|librocksdbjni-linux64-musl.so)
+      file_pattern='ELF 64-bit.*x86-64'
+      readelf_pattern='Advanced Micro Devices X86-64'
+      ;;
+    librocksdbjni-linux-aarch64.so|librocksdbjni-linux-aarch64-musl.so)
+      file_pattern='ELF 64-bit.*ARM aarch64'
+      readelf_pattern='AArch64'
+      ;;
+    librocksdbjni-linux-ppc64le.so|librocksdbjni-linux-ppc64le-musl.so)
+      file_pattern='ELF 64-bit.*PowerPC'
+      readelf_pattern='PowerPC64'
+      ;;
+    librocksdbjni-linux-s390x.so|librocksdbjni-linux-s390x-musl.so)
+      file_pattern='ELF 64-bit.*IBM S/390'
+      readelf_pattern='IBM S/390'
+      ;;
+    librocksdbjni-linux-riscv64.so|librocksdbjni-linux-riscv64-musl.so)
+      file_pattern='ELF 64-bit.*RISC-V'
+      readelf_pattern='RISC-V'
+      ;;
+    *)
+      echo "No validation rule for native artifact: ${native_name}"
+      exit 1
+      ;;
+  esac
+
+  file_output=$(LC_ALL=C file -b "${native_path}")
+  if ! printf '%s\n' "${file_output}" | grep -Eq "${file_pattern}"; then
+    echo "Unexpected native format for ${native_name}: ${file_output}"
+    exit 1
+  fi
+
+  if hash readelf 2>/dev/null; then
+    readelf_machine=$(LC_ALL=C readelf -h "${native_path}" | awk -F: '/Machine:/{sub(/^ +/, "", $2); print $2; exit}')
+    if ! printf '%s\n' "${readelf_machine}" | grep -Eq "${readelf_pattern}"; then
+      echo "Unexpected ELF machine for ${native_name}: ${readelf_machine}"
+      exit 1
+    fi
+  fi
+}
+
+validate_classifier_jar() {
+  local jar_path="$1"
+  local native_name="$2"
+
+  if ! jar tf "${jar_path}" | grep -Fxq "${native_name}"; then
+    echo "Jar ${jar_path} does not contain ${native_name}"
+    exit 1
+  fi
+}
+
 # Use scl devtoolset if available
 if hash scl 2>/dev/null; then
   DEVTOOLSET=$(scl --list | tr ' ' '\n' | grep -E '^devtoolset-[0-9]+$' | sort -V | tail -1)
@@ -233,7 +298,31 @@ else
   make -j"${J}" rocksdbjavastatic
 fi
 
+shopt -s nullglob
+native_artifacts=(java/target/librocksdbjni-linux*.so)
+
+if [ "${#native_artifacts[@]}" -eq 0 ]; then
+  echo "No Linux JNI native artifacts were produced"
+  exit 1
+fi
+
+for native_artifact in "${native_artifacts[@]}"; do
+  validate_native_artifact "${native_artifact}"
+done
+
 if [ "${ROCKSDB_COPY_JARS:-1}" = "1" ]; then
+  classifier_jars=(java/target/rocksdbjni-*-linux*.jar)
+  if [ "${#classifier_jars[@]}" -eq 0 ]; then
+    echo "Expected Linux classifier jars, but none were produced"
+    exit 1
+  fi
+
+  for classifier_jar in "${classifier_jars[@]}"; do
+    for native_artifact in "${native_artifacts[@]}"; do
+      validate_classifier_jar "${classifier_jar}" "$(basename "${native_artifact}")"
+    done
+  done
+
   cp java/target/librocksdbjni-linux*.so java/target/rocksdbjni-*-linux*.jar java/target/rocksdbjni-*-linux*.jar.sha1 /rocksdb-java-target
 else
   cp java/target/librocksdbjni-linux*.so /rocksdb-java-target
