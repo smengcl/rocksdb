@@ -118,7 +118,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: zulu
           java-version: "8"
       - name: Verify Release Mode
         run: |
@@ -142,7 +142,7 @@ jobs:
             java/target/rocksdbjni-*-osx.jar.sha1
 
   build-win64-mingw:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
       CMAKE_BUILD_TYPE: Release
