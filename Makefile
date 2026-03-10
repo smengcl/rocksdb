@@ -265,6 +265,9 @@ JAVA_STATIC_LDFLAGS += $(ROCKSDB_PLUGIN_LDFLAGS)
 ROCKSDB_PLUGIN_JNI_NATIVE_SOURCES = $(foreach plugin, $(ROCKSDB_PLUGINS), $(foreach source, $($(plugin)_JNI_NATIVE_SOURCES), plugin/$(plugin)/$(source)))
 ALL_JNI_NATIVE_SOURCES = $(JNI_NATIVE_SOURCES) $(ROCKSDB_PLUGIN_JNI_NATIVE_SOURCES)
 ROCKSDB_PLUGIN_JNI_CXX_INCLUDEFLAGS = $(foreach plugin, $(ROCKSDB_PLUGINS), -I./plugin/$(plugin))
+JNI_NATIVE_INCLUDE_FLAGS = -I./java/. -I./java/rocksjni $(JAVA_INCLUDE) $(ROCKSDB_PLUGIN_JNI_CXX_INCLUDEFLAGS)
+JNI_NATIVE_OBJECT_DIR = java/target/jni/$(ROCKSDBJNILIB)
+JNI_NATIVE_OBJECTS = $(addprefix $(JNI_NATIVE_OBJECT_DIR)/,$(ALL_JNI_NATIVE_SOURCES:.cc=.o))
 
 ifneq ($(strip $(ROCKSDB_PLUGIN_PKGCONFIG_REQUIRES)),)
 LDFLAGS := $(LDFLAGS) $(shell pkg-config --libs $(ROCKSDB_PLUGIN_PKGCONFIG_REQUIRES))
@@ -2297,9 +2300,10 @@ endif
 rocksdbjavastatic_javalib:
 	# Build JNI headers from both main and test Java sources; javadocs are not required for JNI packaging.
 	cd java; $(MAKE) java java_test
+	$(MAKE) $(JNI_NATIVE_OBJECTS)
 	rm -f java/target/$(ROCKSDBJNILIB)
-	$(CXX) $(CXXFLAGS) -I./java/. $(JAVA_INCLUDE) -shared -fPIC \
-	  -o ./java/target/$(ROCKSDBJNILIB) $(ALL_JNI_NATIVE_SOURCES) \
+	$(CXX) $(CXXFLAGS) -shared -fPIC \
+	  -o ./java/target/$(ROCKSDBJNILIB) $(JNI_NATIVE_OBJECTS) \
 	  $(LIB_OBJECTS) $(COVERAGEFLAGS) \
 	  $(JAVA_COMPRESSIONS) $(JAVA_STATIC_LDFLAGS)
 	cd java/target;if [ "$(DEBUG_LEVEL)" == "0" ] && [ -z "$(ROCKSDB_CROSS_TRIPLE)" ]; then \
@@ -2420,13 +2424,17 @@ rocksdbjavastaticnexusbundlejar: rocksdbjavageneratepom
 jl/%.o: %.cc
 	$(AM_V_CC)mkdir -p $(@D) && $(CXX) $(CXXFLAGS) -fPIC -c $< -o $@ $(COVERAGEFLAGS)
 
+$(JNI_NATIVE_OBJECT_DIR)/%.o: %.cc
+	$(AM_V_CC)mkdir -p $(@D) && $(CXX) $(CXXFLAGS) $(JNI_NATIVE_INCLUDE_FLAGS) -fPIC -c $< -o $@ $(COVERAGEFLAGS)
+
 rocksdbjava: $(LIB_OBJECTS)
 ifeq ($(JAVA_HOME),)
 	$(error JAVA_HOME is not set)
 endif
 	$(AM_V_GEN)cd java; $(MAKE) javalib;
+	$(AM_V_at)$(MAKE) $(JNI_NATIVE_OBJECTS)
 	$(AM_V_at)rm -f ./java/target/$(ROCKSDBJNILIB)
-	$(AM_V_at)$(CXX) $(CXXFLAGS) -I./java/. -I./java/rocksjni $(JAVA_INCLUDE) $(ROCKSDB_PLUGIN_JNI_CXX_INCLUDEFLAGS) -shared -fPIC -o ./java/target/$(ROCKSDBJNILIB) $(ALL_JNI_NATIVE_SOURCES) $(LIB_OBJECTS) $(JAVA_LDFLAGS) $(COVERAGEFLAGS)
+	$(AM_V_at)$(CXX) $(CXXFLAGS) -shared -fPIC -o ./java/target/$(ROCKSDBJNILIB) $(JNI_NATIVE_OBJECTS) $(LIB_OBJECTS) $(JAVA_LDFLAGS) $(COVERAGEFLAGS)
 	$(AM_V_at)cd java; $(JAR_CMD) -cf target/$(ROCKSDB_JAR) HISTORY*.md
 	$(AM_V_at)cd java/target; $(JAR_CMD) -uf $(ROCKSDB_JAR) $(ROCKSDBJNILIB)
 	$(AM_V_at)cd java/target/classes; $(JAR_CMD) -uf ../$(ROCKSDB_JAR) org/rocksdb/*.class org/rocksdb/util/*.class
