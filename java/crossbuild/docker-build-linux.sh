@@ -115,4 +115,8 @@ else
   make -j"${J}" rocksdbjavastatic
 fi
 
-cp java/target/librocksdbjni-linux*.so java/target/rocksdbjni-*-linux*.jar java/target/rocksdbjni-*-linux*.jar.sha1 /rocksdb-java-target
+if [ "${ROCKSDB_COPY_JARS:-1}" = "1" ]; then
+  cp java/target/librocksdbjni-linux*.so java/target/rocksdbjni-*-linux*.jar java/target/rocksdbjni-*-linux*.jar.sha1 /rocksdb-java-target
+else
+  cp java/target/librocksdbjni-linux*.so /rocksdb-java-target
+fi
