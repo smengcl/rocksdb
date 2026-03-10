@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  build-linux-classifiers:
+  build-linux-core:
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     env:
@@ -21,8 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify Release Mode
-        run: test "${DEBUG_LEVEL}" = "0"
-      - name: Build Linux Classifiers
+        run: |
+          set -euxo pipefail
+          test "${DEBUG_LEVEL}" = "0"
+          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerx86 2>&1 | grep -q "Compiling in debug mode"
+      - name: Build Linux Classifier Targets
         run: |
           set -euxo pipefail
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86
@@ -31,12 +34,80 @@ jobs:
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86_64musl
       - uses: actions/upload-artifact@v4
         with:
-          name: rocksdbjni-linux-classifiers
+          name: rocksdbjni-linux-core
           if-no-files-found: error
           path: |
-            java/target/librocksdbjni-linux*.so
-            java/target/rocksdbjni-*-linux*.jar
-            java/target/rocksdbjni-*-linux*.jar.sha1
+            java/target/librocksdbjni-linux32.so
+            java/target/librocksdbjni-linux64.so
+            java/target/librocksdbjni-linux32-musl.so
+            java/target/librocksdbjni-linux64-musl.so
+            java/target/rocksdbjni-*-linux32.jar
+            java/target/rocksdbjni-*-linux64.jar
+            java/target/rocksdbjni-*-linux32-musl.jar
+            java/target/rocksdbjni-*-linux64-musl.jar
+            java/target/rocksdbjni-*-linux32.jar.sha1
+            java/target/rocksdbjni-*-linux64.jar.sha1
+            java/target/rocksdbjni-*-linux32-musl.jar.sha1
+            java/target/rocksdbjni-*-linux64-musl.jar.sha1
+
+  build-linux-aarch64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 240
+    env:
+      DEBUG_LEVEL: 0
+      J: "100%"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Release Mode
+        run: |
+          set -euxo pipefail
+          test "${DEBUG_LEVEL}" = "0"
+          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerarm64v8 2>&1 | grep -q "Compiling in debug mode"
+      - name: Build Linux Aarch64 Targets
+        run: |
+          set -euxo pipefail
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerarm64v8
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerarm64v8musl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdbjni-linux-aarch64
+          if-no-files-found: error
+          path: |
+            java/target/librocksdbjni-linux-aarch64.so
+            java/target/librocksdbjni-linux-aarch64-musl.so
+
+  build-linux-emulated:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      DEBUG_LEVEL: 0
+      J: "100%"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - name: Verify Release Mode
+        run: |
+          set -euxo pipefail
+          test "${DEBUG_LEVEL}" = "0"
+          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerppc64le 2>&1 | grep -q "Compiling in debug mode"
+      - name: Build Linux Emulated Targets
+        run: |
+          set -euxo pipefail
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerppc64le
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockers390x
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerriscv64
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerppc64lemusl
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockers390xmusl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdbjni-linux-emulated
+          if-no-files-found: error
+          path: |
+            java/target/librocksdbjni-linux-ppc64le.so
+            java/target/librocksdbjni-linux-ppc64le-musl.so
+            java/target/librocksdbjni-linux-s390x.so
+            java/target/librocksdbjni-linux-s390x-musl.so
+            java/target/librocksdbjni-linux-riscv64.so
 
   build-osx-classifier:
     runs-on: macos-14
@@ -51,7 +122,10 @@ jobs:
           distribution: temurin
           java-version: "8"
       - name: Verify Release Mode
-        run: test "${DEBUG_LEVEL}" = "0"
+        run: |
+          set -euxo pipefail
+          test "${DEBUG_LEVEL}" = "0"
+          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticosx 2>&1 | grep -q "Compiling in debug mode"
       - name: Build OSX Classifier
         run: |
           set -euxo pipefail
@@ -60,19 +134,69 @@ jobs:
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticosx
       - uses: actions/upload-artifact@v4
         with:
-          name: rocksdbjni-osx-classifier
+          name: rocksdbjni-osx
           if-no-files-found: error
           path: |
-            java/target/librocksdbjni-osx*.jnilib
+            java/target/librocksdbjni-osx-arm64.jnilib
+            java/target/librocksdbjni-osx-x86_64.jnilib
             java/target/rocksdbjni-*-osx.jar
             java/target/rocksdbjni-*-osx.jar.sha1
 
+  build-win64-mingw:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+      - name: Install Mingw Toolchain
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+          if update-alternatives --query x86_64-w64-mingw32-g++ >/dev/null 2>&1; then
+            sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix || true
+          fi
+      - name: Build Win64 JNI Classifier (Release)
+        run: |
+          set -euxo pipefail
+          cmake -S . -B build-mingw \
+            -DJNI=1 \
+            -DWITH_GFLAGS=OFF \
+            -DBUILD_SHARED_LIBS=ON \
+            -DROCKSDB_BUILD_SHARED=ON \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+            -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++
+          cmake --build build-mingw --target rocksdbjava -- -j"$(nproc)"
+
+          WIN64_DLL="$(find build-mingw -type f -name 'librocksdbjni-win64.dll' | head -n1)"
+          WIN64_JAR="$(find build-mingw -type f -name 'rocksdbjni-*-win64.jar' | head -n1)"
+          test -n "${WIN64_DLL}"
+          test -n "${WIN64_JAR}"
+
+          mkdir -p output-win64
+          cp "${WIN64_DLL}" output-win64/
+          cp "${WIN64_JAR}" output-win64/
+          openssl sha1 "${WIN64_JAR}" | sed 's/.*= \([0-9a-f]*\)/\1/' > "output-win64/$(basename "${WIN64_JAR}").sha1"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdbjni-win64
+          if-no-files-found: error
+          path: output-win64/
+
   assemble-fat-jar:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     needs:
-      - build-linux-classifiers
+      - build-linux-core
+      - build-linux-aarch64
+      - build-linux-emulated
       - build-osx-classifier
+      - build-win64-mingw
     steps:
       - uses: actions/setup-java@v4
         with:
@@ -80,48 +204,99 @@ jobs:
           java-version: "8"
       - uses: actions/download-artifact@v4
         with:
-          name: rocksdbjni-linux-classifiers
-          path: artifacts/linux
+          name: rocksdbjni-linux-core
+          path: artifacts/linux-core
       - uses: actions/download-artifact@v4
         with:
-          name: rocksdbjni-osx-classifier
+          name: rocksdbjni-linux-aarch64
+          path: artifacts/linux-aarch64
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocksdbjni-linux-emulated
+          path: artifacts/linux-emulated
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocksdbjni-osx
           path: artifacts/osx
-      - name: Assemble Fat Jar
+      - uses: actions/download-artifact@v4
+        with:
+          name: rocksdbjni-win64
+          path: artifacts/win64
+      - name: Assemble And Verify Fat Jar
         shell: bash
         run: |
           set -euxo pipefail
-          BASE_JAR="$(ls artifacts/linux/rocksdbjni-*-linux64.jar | head -n1)"
+
+          find_one() {
+            local root="$1"
+            local name="$2"
+            find "${root}" -type f -name "${name}" | head -n1
+          }
+
+          BASE_JAR="$(find_one artifacts/linux-core 'rocksdbjni-*-linux64.jar')"
           VERSION="$(basename "${BASE_JAR}" | sed -E 's/^rocksdbjni-(.+)-linux64\.jar$/\1/')"
           FAT_JAR="rocksdbjni-${VERSION}.jar"
-
           cp "${BASE_JAR}" "${FAT_JAR}"
+
+          mkdir -p stage output
+          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux32.so')" stage/
+          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux64.so')" stage/
+          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux32-musl.so')" stage/
+          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux64-musl.so')" stage/
+          cp "$(find_one artifacts/linux-aarch64 'librocksdbjni-linux-aarch64.so')" stage/
+          cp "$(find_one artifacts/linux-aarch64 'librocksdbjni-linux-aarch64-musl.so')" stage/
+          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-ppc64le.so')" stage/
+          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-ppc64le-musl.so')" stage/
+          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-s390x.so')" stage/
+          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-s390x-musl.so')" stage/
+          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-riscv64.so')" stage/
+          cp "$(find_one artifacts/osx 'librocksdbjni-osx-arm64.jnilib')" stage/
+          cp "$(find_one artifacts/osx 'librocksdbjni-osx-x86_64.jnilib')" stage/
+          cp "$(find_one artifacts/win64 'librocksdbjni-win64.dll')" stage/
+
           jar uf "${FAT_JAR}" \
-            -C artifacts/linux librocksdbjni-linux32.so \
-            -C artifacts/linux librocksdbjni-linux64.so \
-            -C artifacts/linux librocksdbjni-linux32-musl.so \
-            -C artifacts/linux librocksdbjni-linux64-musl.so \
-            -C artifacts/osx librocksdbjni-osx-arm64.jnilib \
-            -C artifacts/osx librocksdbjni-osx-x86_64.jnilib
+            -C stage librocksdbjni-linux32.so \
+            -C stage librocksdbjni-linux64.so \
+            -C stage librocksdbjni-linux32-musl.so \
+            -C stage librocksdbjni-linux64-musl.so \
+            -C stage librocksdbjni-linux-aarch64.so \
+            -C stage librocksdbjni-linux-aarch64-musl.so \
+            -C stage librocksdbjni-linux-ppc64le.so \
+            -C stage librocksdbjni-linux-ppc64le-musl.so \
+            -C stage librocksdbjni-linux-s390x.so \
+            -C stage librocksdbjni-linux-s390x-musl.so \
+            -C stage librocksdbjni-linux-riscv64.so \
+            -C stage librocksdbjni-osx-arm64.jnilib \
+            -C stage librocksdbjni-osx-x86_64.jnilib \
+            -C stage librocksdbjni-win64.dll
+
+          # Validate native entry-name parity with 10.2.1.
+          jar tf "${FAT_JAR}" | grep -E '^librocksdbjni-.*\.(so|jnilib|dll)$' | sort > actual-natives.txt
+          curl -L -o rocksdbjni-10.2.1.jar https://repo1.maven.org/maven2/org/rocksdb/rocksdbjni/10.2.1/rocksdbjni-10.2.1.jar
+          jar tf rocksdbjni-10.2.1.jar | grep -E '^librocksdbjni-.*\.(so|jnilib|dll)$' | sort > expected-natives.txt
+          diff -u expected-natives.txt actual-natives.txt
+
+          # Validate binary formats.
+          file stage/librocksdbjni-linux64.so | grep -q 'ELF 64-bit'
+          file stage/librocksdbjni-linux-riscv64.so | grep -q 'ELF 64-bit'
+          file stage/librocksdbjni-win64.dll | grep -Eq 'PE32\+ executable|PE32\+ DLL'
+          readelf -h stage/librocksdbjni-linux64.so | grep -q 'Machine:'
 
           openssl sha1 "${FAT_JAR}" | sed 's/.*= \([0-9a-f]*\)/\1/' > "${FAT_JAR}.sha1"
-
-          mkdir -p output
           mv "${FAT_JAR}" "${FAT_JAR}.sha1" output/
-          cp artifacts/linux/rocksdbjni-*-linux*.jar output/
-          cp artifacts/linux/rocksdbjni-*-linux*.jar.sha1 output/
-          cp artifacts/osx/rocksdbjni-*-osx.jar output/
-          cp artifacts/osx/rocksdbjni-*-osx.jar.sha1 output/
-      - name: Verify Fat Jar Content
-        shell: bash
-        run: |
-          set -euxo pipefail
-          FAT_JAR="$(ls output/rocksdbjni-*.jar | grep -vE -- '-(linux|osx)\.jar$' | head -n1)"
-          jar tf "${FAT_JAR}" | grep -q 'librocksdbjni-linux32\.so'
-          jar tf "${FAT_JAR}" | grep -q 'librocksdbjni-linux64\.so'
-          jar tf "${FAT_JAR}" | grep -q 'librocksdbjni-linux32-musl\.so'
-          jar tf "${FAT_JAR}" | grep -q 'librocksdbjni-linux64-musl\.so'
-          jar tf "${FAT_JAR}" | grep -q 'librocksdbjni-osx-arm64\.jnilib'
-          jar tf "${FAT_JAR}" | grep -q 'librocksdbjni-osx-x86_64\.jnilib'
+
+          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux32.jar')" output/
+          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux64.jar')" output/
+          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux32-musl.jar')" output/
+          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux64-musl.jar')" output/
+          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux32.jar.sha1')" output/
+          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux64.jar.sha1')" output/
+          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux32-musl.jar.sha1')" output/
+          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux64-musl.jar.sha1')" output/
+          cp "$(find_one artifacts/osx 'rocksdbjni-*-osx.jar')" output/
+          cp "$(find_one artifacts/osx 'rocksdbjni-*-osx.jar.sha1')" output/
+          cp "$(find_one artifacts/win64 'rocksdbjni-*-win64.jar')" output/
+          cp "$(find_one artifacts/win64 'rocksdbjni-*-win64.jar.sha1')" output/
       - uses: actions/upload-artifact@v4
         with:
           name: rocksdbjni-fatjar
