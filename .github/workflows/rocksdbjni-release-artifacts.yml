@@ -373,24 +373,10 @@ jobs:
           cp "$(find_one artifacts/linux-x64 'rocksdbjni-*-linux64.jar')" output/
           cp "$(find_one artifacts/linux-x86 'rocksdbjni-*-linux32-musl.jar')" output/
           cp "$(find_one artifacts/linux-x64 'rocksdbjni-*-linux64-musl.jar')" output/
-          cp "$(find_one artifacts/linux-aarch64 'rocksdbjni-*-linux-aarch64.jar')" output/
-          cp "$(find_one artifacts/linux-aarch64 'rocksdbjni-*-linux-aarch64-musl.jar')" output/
-          cp "$(find_one artifacts/linux-ppc64le 'rocksdbjni-*-linux-ppc64le.jar')" output/
-          cp "$(find_one artifacts/linux-ppc64le 'rocksdbjni-*-linux-ppc64le-musl.jar')" output/
-          cp "$(find_one artifacts/linux-s390x 'rocksdbjni-*-linux-s390x.jar')" output/
-          cp "$(find_one artifacts/linux-s390x 'rocksdbjni-*-linux-s390x-musl.jar')" output/
-          cp "$(find_one artifacts/linux-riscv64 'rocksdbjni-*-linux-riscv64.jar')" output/
           cp "$(find_one artifacts/linux-x86 'rocksdbjni-*-linux32.jar.sha1')" output/
           cp "$(find_one artifacts/linux-x64 'rocksdbjni-*-linux64.jar.sha1')" output/
           cp "$(find_one artifacts/linux-x86 'rocksdbjni-*-linux32-musl.jar.sha1')" output/
           cp "$(find_one artifacts/linux-x64 'rocksdbjni-*-linux64-musl.jar.sha1')" output/
-          cp "$(find_one artifacts/linux-aarch64 'rocksdbjni-*-linux-aarch64.jar.sha1')" output/
-          cp "$(find_one artifacts/linux-aarch64 'rocksdbjni-*-linux-aarch64-musl.jar.sha1')" output/
-          cp "$(find_one artifacts/linux-ppc64le 'rocksdbjni-*-linux-ppc64le.jar.sha1')" output/
-          cp "$(find_one artifacts/linux-ppc64le 'rocksdbjni-*-linux-ppc64le-musl.jar.sha1')" output/
-          cp "$(find_one artifacts/linux-s390x 'rocksdbjni-*-linux-s390x.jar.sha1')" output/
-          cp "$(find_one artifacts/linux-s390x 'rocksdbjni-*-linux-s390x-musl.jar.sha1')" output/
-          cp "$(find_one artifacts/linux-riscv64 'rocksdbjni-*-linux-riscv64.jar.sha1')" output/
           cp "$(find_one artifacts/osx 'rocksdbjni-*-osx.jar')" output/
           cp "$(find_one artifacts/osx 'rocksdbjni-*-osx.jar.sha1')" output/
           cp "$(find_one artifacts/win64 'rocksdbjni-*-win64.jar')" output/
