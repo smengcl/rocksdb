@@ -19,7 +19,7 @@ jobs:
       DEBUG_LEVEL: 0
       J: "100%"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Verify Release Mode
         run: |
           set -euxo pipefail
@@ -30,7 +30,7 @@ jobs:
           set -euxo pipefail
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86musl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: rocksdbjni-linux-x86
           if-no-files-found: error
@@ -49,7 +49,7 @@ jobs:
       DEBUG_LEVEL: 0
       J: "100%"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Verify Release Mode
         run: |
           set -euxo pipefail
@@ -60,7 +60,7 @@ jobs:
           set -euxo pipefail
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86_64
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86_64musl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: rocksdbjni-linux-x64
           if-no-files-found: error
@@ -79,7 +79,7 @@ jobs:
       DEBUG_LEVEL: 0
       J: "100%"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Verify Release Mode
         run: |
           set -euxo pipefail
@@ -90,7 +90,7 @@ jobs:
           set -euxo pipefail
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerarm64v8
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerarm64v8musl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: rocksdbjni-linux-aarch64
           if-no-files-found: error
@@ -105,7 +105,7 @@ jobs:
       DEBUG_LEVEL: 0
       J: "100%"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Verify Release Mode
         run: |
           set -euxo pipefail
@@ -116,7 +116,7 @@ jobs:
           set -euxo pipefail
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerppc64le
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerppc64lemusl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: rocksdbjni-linux-ppc64le
           if-no-files-found: error
@@ -131,7 +131,7 @@ jobs:
       DEBUG_LEVEL: 0
       J: "100%"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Verify Release Mode
         run: |
           set -euxo pipefail
@@ -141,7 +141,7 @@ jobs:
         run: |
           set -euxo pipefail
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerriscv64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: rocksdbjni-linux-riscv64
           if-no-files-found: error
@@ -155,7 +155,7 @@ jobs:
       DEBUG_LEVEL: 0
       J: "100%"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Verify Release Mode
         run: |
           set -euxo pipefail
@@ -166,7 +166,7 @@ jobs:
           set -euxo pipefail
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockers390x
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockers390xmusl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: rocksdbjni-linux-s390x
           if-no-files-found: error
@@ -181,8 +181,8 @@ jobs:
       DEBUG_LEVEL: 0
       J: "100%"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: zulu
           java-version: "8"
@@ -197,7 +197,7 @@ jobs:
           java -version
           javac -version
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticosx
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: rocksdbjni-osx
           if-no-files-found: error
@@ -214,8 +214,8 @@ jobs:
       DEBUG_LEVEL: 0
       CMAKE_BUILD_TYPE: Release
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "8"
@@ -236,7 +236,7 @@ jobs:
           set -euxo pipefail
           make DEBUG_LEVEL="${DEBUG_LEVEL}" CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" rocksdbjavastaticwin64
           jar tf java/target/rocksdbjni-*-win64.jar | grep -Fx 'librocksdbjni-win64.dll'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: rocksdbjni-win64
           if-no-files-found: error
@@ -258,40 +258,40 @@ jobs:
       - build-osx
       - build-win64
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "8"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-linux-x86
           path: artifacts/linux-x86
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-linux-x64
           path: artifacts/linux-x64
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-linux-aarch64
           path: artifacts/linux-aarch64
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-linux-ppc64le
           path: artifacts/linux-ppc64le
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-linux-riscv64
           path: artifacts/linux-riscv64
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-linux-s390x
           path: artifacts/linux-s390x
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-osx
           path: artifacts/osx
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-win64
           path: artifacts/win64
@@ -354,7 +354,7 @@ jobs:
           cp "$(find_one artifacts/osx 'rocksdbjni-*-osx.jar.sha1')" output/
           cp "$(find_one artifacts/win64 'rocksdbjni-*-win64.jar')" output/
           cp "$(find_one artifacts/win64 'rocksdbjni-*-win64.jar.sha1')" output/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: rocksdbjni-release-artifacts
           if-no-files-found: error
