@@ -955,6 +955,28 @@ prioritize_long_running_tests =						\
 # See "man parallel" for its "-j ..." option.
 J ?= 100%
 
+define resolve_make_jobs
+$(strip $(shell \
+	J_VALUE='$(strip $(1))'; \
+	if [ -z "$$J_VALUE" ]; then J_VALUE='100%'; fi; \
+	if [ "$${J_VALUE%\%}" != "$$J_VALUE" ]; then \
+		J_PERCENT="$${J_VALUE%\%}"; \
+		if printf '%s' "$$J_PERCENT" | grep -Eq '^[0-9]+$$'; then \
+			CPU_COUNT="$$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 1)"; \
+			J_VALUE=$$(( (CPU_COUNT * J_PERCENT + 99) / 100 )); \
+			if [ "$$J_VALUE" -lt 1 ]; then J_VALUE=1; fi; \
+		else \
+			J_VALUE=1; \
+		fi; \
+	elif ! printf '%s' "$$J_VALUE" | grep -Eq '^[0-9]+$$'; then \
+		J_VALUE=1; \
+	fi; \
+	printf '%s' "$$J_VALUE"))
+endef
+
+ROCKSDB_JAVA_MAKE_JOBS ?= $(call resolve_make_jobs,$(J))
+ROCKSDB_JAVA_MAKE_PARALLEL_FLAGS = -j$(ROCKSDB_JAVA_MAKE_JOBS)
+
 # Use this regexp to select the subset of tests whose names match.
 tests-regexp = .
 EXCLUDE_TESTS_REGEX ?= "^$$"
@@ -2289,13 +2311,13 @@ rocksdbjavastaticosx_archs:
 
 rocksdbjavastaticosx_arch_%:
 ifeq ($(JAVA_HOME),)
-	$(error JAVA_HOME is not set)
+		$(error JAVA_HOME is not set)
 endif
-	$(MAKE) clean-ext-libraries-bin
-	$(MAKE) clean-rocks
-	ARCHFLAG="-arch $*" $(MAKE) rocksdbjavastatic_deps
-	ARCHFLAG="-arch $*" $(MAKE) rocksdbjavastatic_libobjects
-	ARCHFLAG="-arch $*" ROCKSDBJNILIB="librocksdbjni-osx-$*.jnilib" $(MAKE) rocksdbjavastatic_javalib
+		$(MAKE) clean-ext-libraries-bin
+		$(MAKE) clean-rocks
+		ARCHFLAG="-arch $*" $(MAKE) $(ROCKSDB_JAVA_MAKE_PARALLEL_FLAGS) rocksdbjavastatic_deps
+		ARCHFLAG="-arch $*" $(MAKE) $(ROCKSDB_JAVA_MAKE_PARALLEL_FLAGS) rocksdbjavastatic_libobjects
+		ARCHFLAG="-arch $*" ROCKSDBJNILIB="librocksdbjni-osx-$*.jnilib" $(MAKE) $(ROCKSDB_JAVA_MAKE_PARALLEL_FLAGS) rocksdbjavastatic_javalib
 
 ifeq ($(JAR_CMD),)
 ifneq ($(JAVA_HOME),)
