@@ -1,10 +1,10 @@
-name: rocksdbjni-fatjar
+name: rocksdbjni-release-artifacts
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - ".github/workflows/rocksdbjni-fatjar.yml"
+      - ".github/workflows/rocksdbjni-release-artifacts.yml"
       - "Makefile"
       - "java/**"
 
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  build-linux-core:
+  build-linux-x86-and-x64:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 240
     env:
@@ -34,7 +34,7 @@ jobs:
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86_64musl
       - uses: actions/upload-artifact@v4
         with:
-          name: rocksdbjni-linux-core
+          name: rocksdbjni-linux-x86-and-x64
           if-no-files-found: error
           path: |
             java/target/librocksdbjni-linux32.so
@@ -76,7 +76,7 @@ jobs:
             java/target/librocksdbjni-linux-aarch64.so
             java/target/librocksdbjni-linux-aarch64-musl.so
 
-  build-linux-emulated:
+  build-linux-ppc64le-riscv64-s390x:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 300
     env:
@@ -99,7 +99,7 @@ jobs:
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockers390xmusl
       - uses: actions/upload-artifact@v4
         with:
-          name: rocksdbjni-linux-emulated
+          name: rocksdbjni-linux-ppc64le-riscv64-s390x
           if-no-files-found: error
           path: |
             java/target/librocksdbjni-linux-ppc64le.so
@@ -108,7 +108,7 @@ jobs:
             java/target/librocksdbjni-linux-s390x-musl.so
             java/target/librocksdbjni-linux-riscv64.so
 
-  build-osx-classifier:
+  build-osx:
     runs-on: macos-14
     timeout-minutes: 240
     env:
@@ -141,7 +141,7 @@ jobs:
             java/target/rocksdbjni-*-osx.jar
             java/target/rocksdbjni-*-osx.jar.sha1
 
-  build-win64-mingw:
+  build-win64:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
@@ -179,15 +179,15 @@ jobs:
             java/target/rocksdbjni-*-win64.jar
             java/target/rocksdbjni-*-win64.jar.sha1
 
-  assemble-fat-jar:
+  assemble-release-artifacts:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     needs:
-      - build-linux-core
+      - build-linux-x86-and-x64
       - build-linux-aarch64
-      - build-linux-emulated
-      - build-osx-classifier
-      - build-win64-mingw
+      - build-linux-ppc64le-riscv64-s390x
+      - build-osx
+      - build-win64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -196,16 +196,16 @@ jobs:
           java-version: "8"
       - uses: actions/download-artifact@v4
         with:
-          name: rocksdbjni-linux-core
-          path: artifacts/linux-core
+          name: rocksdbjni-linux-x86-and-x64
+          path: artifacts/linux-x86-and-x64
       - uses: actions/download-artifact@v4
         with:
           name: rocksdbjni-linux-aarch64
           path: artifacts/linux-aarch64
       - uses: actions/download-artifact@v4
         with:
-          name: rocksdbjni-linux-emulated
-          path: artifacts/linux-emulated
+          name: rocksdbjni-linux-ppc64le-riscv64-s390x
+          path: artifacts/linux-ppc64le-riscv64-s390x
       - uses: actions/download-artifact@v4
         with:
           name: rocksdbjni-osx
@@ -226,17 +226,17 @@ jobs:
           }
 
           mkdir -p java/target output
-          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux32.so')" java/target/
-          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux64.so')" java/target/
-          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux32-musl.so')" java/target/
-          cp "$(find_one artifacts/linux-core 'librocksdbjni-linux64-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-x86-and-x64 'librocksdbjni-linux32.so')" java/target/
+          cp "$(find_one artifacts/linux-x86-and-x64 'librocksdbjni-linux64.so')" java/target/
+          cp "$(find_one artifacts/linux-x86-and-x64 'librocksdbjni-linux32-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-x86-and-x64 'librocksdbjni-linux64-musl.so')" java/target/
           cp "$(find_one artifacts/linux-aarch64 'librocksdbjni-linux-aarch64.so')" java/target/
           cp "$(find_one artifacts/linux-aarch64 'librocksdbjni-linux-aarch64-musl.so')" java/target/
-          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-ppc64le.so')" java/target/
-          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-ppc64le-musl.so')" java/target/
-          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-s390x.so')" java/target/
-          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-s390x-musl.so')" java/target/
-          cp "$(find_one artifacts/linux-emulated 'librocksdbjni-linux-riscv64.so')" java/target/
+          cp "$(find_one artifacts/linux-ppc64le-riscv64-s390x 'librocksdbjni-linux-ppc64le.so')" java/target/
+          cp "$(find_one artifacts/linux-ppc64le-riscv64-s390x 'librocksdbjni-linux-ppc64le-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-ppc64le-riscv64-s390x 'librocksdbjni-linux-s390x.so')" java/target/
+          cp "$(find_one artifacts/linux-ppc64le-riscv64-s390x 'librocksdbjni-linux-s390x-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-ppc64le-riscv64-s390x 'librocksdbjni-linux-riscv64.so')" java/target/
           cp "$(find_one artifacts/osx 'librocksdbjni-osx-arm64.jnilib')" java/target/
           cp "$(find_one artifacts/osx 'librocksdbjni-osx-x86_64.jnilib')" java/target/
           cp "$(find_one artifacts/win64 'librocksdbjni-win64.dll')" java/target/
@@ -261,20 +261,20 @@ jobs:
           cp "${FAT_JAR}" output/
           cp "${FAT_JAR}.sha1" output/
 
-          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux32.jar')" output/
-          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux64.jar')" output/
-          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux32-musl.jar')" output/
-          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux64-musl.jar')" output/
-          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux32.jar.sha1')" output/
-          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux64.jar.sha1')" output/
-          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux32-musl.jar.sha1')" output/
-          cp "$(find_one artifacts/linux-core 'rocksdbjni-*-linux64-musl.jar.sha1')" output/
+          cp "$(find_one artifacts/linux-x86-and-x64 'rocksdbjni-*-linux32.jar')" output/
+          cp "$(find_one artifacts/linux-x86-and-x64 'rocksdbjni-*-linux64.jar')" output/
+          cp "$(find_one artifacts/linux-x86-and-x64 'rocksdbjni-*-linux32-musl.jar')" output/
+          cp "$(find_one artifacts/linux-x86-and-x64 'rocksdbjni-*-linux64-musl.jar')" output/
+          cp "$(find_one artifacts/linux-x86-and-x64 'rocksdbjni-*-linux32.jar.sha1')" output/
+          cp "$(find_one artifacts/linux-x86-and-x64 'rocksdbjni-*-linux64.jar.sha1')" output/
+          cp "$(find_one artifacts/linux-x86-and-x64 'rocksdbjni-*-linux32-musl.jar.sha1')" output/
+          cp "$(find_one artifacts/linux-x86-and-x64 'rocksdbjni-*-linux64-musl.jar.sha1')" output/
           cp "$(find_one artifacts/osx 'rocksdbjni-*-osx.jar')" output/
           cp "$(find_one artifacts/osx 'rocksdbjni-*-osx.jar.sha1')" output/
           cp "$(find_one artifacts/win64 'rocksdbjni-*-win64.jar')" output/
           cp "$(find_one artifacts/win64 'rocksdbjni-*-win64.jar.sha1')" output/
       - uses: actions/upload-artifact@v4
         with:
-          name: rocksdbjni-fatjar
+          name: rocksdbjni-release-artifacts
           if-no-files-found: error
           path: output/
