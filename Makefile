@@ -2311,7 +2311,7 @@ rocksdbjavastatic_javalib:
 	cd java; $(MAKE) java java_test
 	$(MAKE) $(JNI_NATIVE_OBJECTS)
 	rm -f java/target/$(ROCKSDBJNILIB)
-	$(CXX) $(CXXFLAGS) -shared -fPIC \
+	$(CXX) $(CXXFLAGS) $(EXEC_LDFLAGS) $(LDFLAGS) -shared -fPIC \
 	  -o ./java/target/$(ROCKSDBJNILIB) $(JNI_NATIVE_OBJECTS) \
 	  $(LIB_OBJECTS) $(COVERAGEFLAGS) \
 	  $(JAVA_COMPRESSIONS) $(JAVA_STATIC_LDFLAGS)

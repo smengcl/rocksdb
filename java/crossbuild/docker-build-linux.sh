@@ -30,6 +30,10 @@ fi
 # Build defaults for release jars
 export PORTABLE=1
 
+# Release artifact builds must never pick up sanitizer instrumentation.
+unset COMPILE_WITH_ASAN COMPILE_WITH_TSAN COMPILE_WITH_UBSAN
+unset ASAN_OPTIONS TSAN_OPTIONS UBSAN_OPTIONS
+
 # just in-case this is run outside Docker
 mkdir -p /rocksdb-local-build
 
@@ -207,6 +211,13 @@ fi
 if [ -z "${EXTRA_CFLAGS}" ]; then
   EXTRA_CFLAGS=""
 fi
+if [ -z "${EXTRA_LDFLAGS}" ]; then
+  EXTRA_LDFLAGS=""
+fi
+
+EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS} -fno-sanitize=undefined -fno-sanitize=address -fno-sanitize=thread"
+EXTRA_CFLAGS="${EXTRA_CFLAGS} -fno-sanitize=undefined -fno-sanitize=address -fno-sanitize=thread"
+EXTRA_LDFLAGS="${EXTRA_LDFLAGS} -fno-sanitize=undefined -fno-sanitize=address -fno-sanitize=thread"
 
 if [ -n "${ROCKSDB_CROSS_TRIPLE}" ]; then
   EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS} -Wno-error=unknown-warning-option -Wno-unknown-warning-option"
@@ -223,6 +234,28 @@ fi
 
 export EXTRA_CXXFLAGS
 export EXTRA_CFLAGS
+export EXTRA_LDFLAGS
+
+validate_no_sanitizer_refs() {
+  local native_path="$1"
+  local symbol_dump=""
+  local pattern='__ubsan_|__asan_|__tsan_'
+
+  if hash nm 2>/dev/null; then
+    symbol_dump=$(nm -D "${native_path}" 2>/dev/null || true)
+  elif hash readelf 2>/dev/null; then
+    symbol_dump=$(readelf -Ws "${native_path}" 2>/dev/null || true)
+  else
+    echo "Neither nm nor readelf is available to validate sanitizer refs in ${native_path}"
+    exit 1
+  fi
+
+  if printf '%s\n' "${symbol_dump}" | grep -Eq "${pattern}"; then
+    echo "Unexpected sanitizer runtime reference in ${native_path}"
+    printf '%s\n' "${symbol_dump}" | grep -E "${pattern}" || true
+    exit 1
+  fi
+}
 
 validate_native_artifact() {
   local native_path="$1"
@@ -326,6 +359,7 @@ fi
 
 for native_artifact in "${native_artifacts[@]}"; do
   validate_native_artifact "${native_artifact}"
+  validate_no_sanitizer_refs "${native_artifact}"
 done
 
 if [ "${ROCKSDB_COPY_JARS:-1}" = "1" ]; then

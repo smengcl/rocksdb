@@ -322,6 +322,10 @@ jobs:
           cp "$(find_one artifacts/osx 'librocksdbjni-osx-x86_64.jnilib')" java/target/
           cp "$(find_one artifacts/win64 'librocksdbjni-win64.dll')" java/target/
 
+          for native in java/target/librocksdbjni-linux*.so; do
+            ! nm -D "${native}" | grep -Eq '__ubsan_|__asan_|__tsan_'
+          done
+
           make DEBUG_LEVEL=0 rocksdbjavastaticfatjarassemble
           FAT_JAR="$(find java/target -maxdepth 1 -type f -name 'rocksdbjni-*.jar' ! -name '*-linux*.jar' ! -name '*-osx.jar' ! -name '*-win64.jar' ! -name '*-javadoc.jar' ! -name '*-sources.jar' | head -n1)"
           test -n "${FAT_JAR}"
