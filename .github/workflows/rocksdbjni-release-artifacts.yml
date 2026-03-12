@@ -18,7 +18,7 @@ jobs:
     env:
       DEBUG_LEVEL: 0
       J: "100%"
-      ROCKSDB_GNU_CROSS_CACHE: ${{ runner.temp }}/rocksdb-gnu-cross
+      ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
     steps:
       - uses: actions/checkout@v5
       - name: Prepare GNU musl cross toolchains
@@ -30,7 +30,7 @@ jobs:
         with:
           name: rocksdbjni-gnu-musl-cross-toolchains
           if-no-files-found: error
-          path: ${{ runner.temp }}/rocksdb-gnu-cross/toolchains
+          path: /tmp/rocksdb-gnu-cross/toolchains
 
   build-linux-x86:
     runs-on: ubuntu-24.04-arm
@@ -40,13 +40,13 @@ jobs:
     env:
       DEBUG_LEVEL: 0
       J: "100%"
-      ROCKSDB_GNU_CROSS_CACHE: ${{ runner.temp }}/rocksdb-gnu-cross
+      ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-gnu-musl-cross-toolchains
-          path: ${{ runner.temp }}/rocksdb-gnu-cross/toolchains
+          path: /tmp/rocksdb-gnu-cross/toolchains
       - name: Verify Release Mode
         run: |
           set -euxo pipefail
@@ -77,13 +77,13 @@ jobs:
     env:
       DEBUG_LEVEL: 0
       J: "100%"
-      ROCKSDB_GNU_CROSS_CACHE: ${{ runner.temp }}/rocksdb-gnu-cross
+      ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-gnu-musl-cross-toolchains
-          path: ${{ runner.temp }}/rocksdb-gnu-cross/toolchains
+          path: /tmp/rocksdb-gnu-cross/toolchains
       - name: Verify Release Mode
         run: |
           set -euxo pipefail
@@ -144,13 +144,13 @@ jobs:
     env:
       DEBUG_LEVEL: 0
       J: "100%"
-      ROCKSDB_GNU_CROSS_CACHE: ${{ runner.temp }}/rocksdb-gnu-cross
+      ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-gnu-musl-cross-toolchains
-          path: ${{ runner.temp }}/rocksdb-gnu-cross/toolchains
+          path: /tmp/rocksdb-gnu-cross/toolchains
       - name: Verify Release Mode
         run: |
           set -euxo pipefail
@@ -207,13 +207,13 @@ jobs:
     env:
       DEBUG_LEVEL: 0
       J: "100%"
-      ROCKSDB_GNU_CROSS_CACHE: ${{ runner.temp }}/rocksdb-gnu-cross
+      ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-gnu-musl-cross-toolchains
-          path: ${{ runner.temp }}/rocksdb-gnu-cross/toolchains
+          path: /tmp/rocksdb-gnu-cross/toolchains
       - name: Verify Release Mode
         run: |
           set -euxo pipefail
