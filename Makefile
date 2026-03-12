@@ -2208,9 +2208,9 @@ libz.a: zlib-$(ZLIB_VER).tar.gz
 	-rm -rf zlib-$(ZLIB_VER)
 	tar xvzf zlib-$(ZLIB_VER).tar.gz
 	if [ -n"$(ARCHFLAG)" ]; then \
-		cd zlib-$(ZLIB_VER) && CFLAGS='-fPIC ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' ./configure --static --archs="$(ARCHFLAG)" && $(MAKE);  \
+		cd zlib-$(ZLIB_VER) && CFLAGS='-fPIC ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' ./configure --static --archs="$(ARCHFLAG)" && $(MAKE) libz.a;  \
 	else \
-		cd zlib-$(ZLIB_VER) && CFLAGS='-fPIC ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' ./configure --static && $(MAKE);  \
+		cd zlib-$(ZLIB_VER) && CFLAGS='-fPIC ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' ./configure --static && $(MAKE) libz.a;  \
 	fi
 	cp zlib-$(ZLIB_VER)/libz.a .
 
@@ -2254,7 +2254,7 @@ lz4-$(LZ4_VER).tar.gz:
 liblz4.a: lz4-$(LZ4_VER).tar.gz
 	-rm -rf lz4-$(LZ4_VER)
 	tar xvzf lz4-$(LZ4_VER).tar.gz
-	cd lz4-$(LZ4_VER)/lib && $(MAKE) CC='$(CC)' CFLAGS='-fPIC -O2 $(ARCHFLAG) ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' all
+	cd lz4-$(LZ4_VER)/lib && $(MAKE) CC='$(CC)' CFLAGS='-fPIC -O2 $(ARCHFLAG) ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' liblz4.a
 	cp lz4-$(LZ4_VER)/lib/liblz4.a .
 
 zstd-$(ZSTD_VER).tar.gz:
@@ -2463,7 +2463,10 @@ rocksdbjavastaticwin64:
 rocksdbjavastaticfatjar: DEBUG_LEVEL=0
 rocksdbjavastaticfatjar: CMAKE_BUILD_TYPE=Release
 rocksdbjavastaticfatjar:
-	$(MAKE) $(ROCKSDB_JAVA_FATJAR_BUILD_TARGETS)
+	@set -e; \
+	for target in $(ROCKSDB_JAVA_FATJAR_BUILD_TARGETS); do \
+		$(MAKE) "$$target"; \
+	done
 	$(MAKE) rocksdbjavastaticfatjarassemble
 
 rocksdbjavastaticreleasedocker:
@@ -2530,19 +2533,31 @@ ROCKSDB_JAVA_RELEASE_CLASSIFIERS = \
 	osx \
 	win64
 
-ROCKSDB_JAVA_PUBLISH_BUNDLE_DIR ?= java/target/maven-central
+ROCKSDB_JAVA_PUBLISH_REPOSITORY_DIR ?= java/target/maven-central
+ROCKSDB_JAVA_PUBLISH_BUNDLE_DIR = $(ROCKSDB_JAVA_PUBLISH_REPOSITORY_DIR)/org/rocksdb/rocksdbjni/$(ROCKSDB_JAVA_VERSION)
 ROCKSDB_JAVA_POM_ARTIFACT = rocksdbjni-$(ROCKSDB_JAVA_VERSION).pom
+ROCKSDB_JAVA_RELEASE_ARTIFACTS = \
+	java/target/$(ROCKSDB_JAVA_POM_ARTIFACT) \
+	java/target/rocksdbjni-$(ROCKSDB_JAVA_VERSION).jar \
+	$(foreach classifier,$(ROCKSDB_JAVA_RELEASE_CLASSIFIERS),java/target/rocksdbjni-$(ROCKSDB_JAVA_VERSION)-$(classifier).jar)
 
 rocksdbjavastaticpreparepomartifact: rocksdbjavageneratepom
 	cp java/pom.xml java/target/$(ROCKSDB_JAVA_POM_ARTIFACT)
 	openssl sha1 java/target/$(ROCKSDB_JAVA_POM_ARTIFACT) | sed 's/.*= \([0-9a-f]*\)/\1/' > java/target/$(ROCKSDB_JAVA_POM_ARTIFACT).sha1
 
 rocksdbjavastaticpublishbundle: rocksdbjavastaticfatjar rocksdbjavastaticpreparepomartifact
-	rm -rf $(ROCKSDB_JAVA_PUBLISH_BUNDLE_DIR)
+	rm -rf $(ROCKSDB_JAVA_PUBLISH_REPOSITORY_DIR)
 	mkdir -p $(ROCKSDB_JAVA_PUBLISH_BUNDLE_DIR)
-	cp java/target/$(ROCKSDB_JAVA_POM_ARTIFACT) java/target/$(ROCKSDB_JAVA_POM_ARTIFACT).sha1 $(ROCKSDB_JAVA_PUBLISH_BUNDLE_DIR)/
-	cp java/target/rocksdbjni-$(ROCKSDB_JAVA_VERSION).jar java/target/rocksdbjni-$(ROCKSDB_JAVA_VERSION).jar.sha1 $(ROCKSDB_JAVA_PUBLISH_BUNDLE_DIR)/
-	$(foreach classifier, $(ROCKSDB_JAVA_RELEASE_CLASSIFIERS), cp java/target/rocksdbjni-$(ROCKSDB_JAVA_VERSION)-$(classifier).jar java/target/rocksdbjni-$(ROCKSDB_JAVA_VERSION)-$(classifier).jar.sha1 $(ROCKSDB_JAVA_PUBLISH_BUNDLE_DIR)/;)
+	@set -e; \
+	for artifact in $(ROCKSDB_JAVA_RELEASE_ARTIFACTS); do \
+		rm -f "$$artifact.asc" "$$artifact.md5" "$$artifact.sha1" "$$artifact.asc.md5" "$$artifact.asc.sha1"; \
+		gpg --yes -ab "$$artifact"; \
+		openssl md5 "$$artifact" | sed 's/.*= \([0-9a-f]*\)/\1/' > "$$artifact.md5"; \
+		openssl sha1 "$$artifact" | sed 's/.*= \([0-9a-f]*\)/\1/' > "$$artifact.sha1"; \
+		openssl md5 "$$artifact.asc" | sed 's/.*= \([0-9a-f]*\)/\1/' > "$$artifact.asc.md5"; \
+		openssl sha1 "$$artifact.asc" | sed 's/.*= \([0-9a-f]*\)/\1/' > "$$artifact.asc.sha1"; \
+		cp "$$artifact" "$$artifact.asc" "$$artifact.md5" "$$artifact.sha1" "$$artifact.asc.md5" "$$artifact.asc.sha1" "$(ROCKSDB_JAVA_PUBLISH_BUNDLE_DIR)/"; \
+	done
 
 rocksdbjavastaticpublish: rocksdbjavastaticpublishbundle rocksdbjavastaticpublishcentral
 
