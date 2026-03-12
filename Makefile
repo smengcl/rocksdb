@@ -2400,6 +2400,14 @@ ROCKSDB_JAVA_WIN64_CMAKE_FLAGS ?= \
 	-DCMAKE_C_FLAGS=-Wno-error=maybe-uninitialized \
 	-DCMAKE_CXX_FLAGS=-Wno-error=maybe-uninitialized
 
+ifneq (,$(filter arm64 aarch64,$(MACHINE)))
+ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM ?= linux/arm64
+ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE ?= evolvedbinary/rocksjava:alpine3_arm64v8-be
+else
+ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM ?= linux/amd64
+ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE ?= evolvedbinary/rocksjava:alpine3_x64-be
+endif
+
 ROCKSDB_JAVA_FATJAR_BUILD_TARGETS = \
 	rocksdbjavastaticosx \
 	rocksdbjavastaticdockerx86 \
@@ -2463,83 +2471,47 @@ rocksdbjavastaticreleasedocker:
 
 rocksdbjavastaticdockerx86:
 	mkdir -p java/target
-	if [ "$(MACHINE)" = "arm64" ] || [ "$(MACHINE)" = "aarch64" ]; then \
-		docker run --rm --name rocksdb_linux_x86-be --platform linux/arm64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=x86-linux-gnu evolvedbinary/rocksjava:alpine3_arm64v8-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	else \
-		docker run --rm --name rocksdb_linux_x86-be --platform linux/386 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:centos7_x86-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	fi
+	docker run --rm --name rocksdb_linux_x86-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=x86-linux-gnu $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerx86_64:
 	mkdir -p java/target
-	if [ "$(MACHINE)" = "arm64" ] || [ "$(MACHINE)" = "aarch64" ]; then \
-		docker run --rm --name rocksdb_linux_x64-be --platform linux/arm64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=x86_64-linux-gnu evolvedbinary/rocksjava:alpine3_arm64v8-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	else \
-		docker run --rm --name rocksdb_linux_x64-be --platform linux/amd64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:centos7_x64-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	fi
+	docker run --rm --name rocksdb_linux_x64-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=x86_64-linux-gnu $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerppc64le:
 	mkdir -p java/target
-	if [ "$(MACHINE)" = "arm64" ] || [ "$(MACHINE)" = "aarch64" ]; then \
-		docker run --rm --name rocksdb_linux_ppc64le-be --platform linux/arm64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=powerpc64le-linux-gnu evolvedbinary/rocksjava:alpine3_arm64v8-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	else \
-		docker run --rm --name rocksdb_linux_ppc64le-be --platform linux/ppc64le --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:centos7_ppc64le-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	fi
+	docker run --rm --name rocksdb_linux_ppc64le-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=powerpc64le-linux-gnu $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerarm64v8:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_arm64v8-be --platform linux/arm64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:centos7_arm64v8-be /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_arm64v8-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=aarch64-linux-gnu $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockers390x:
 	mkdir -p java/target
-	if [ "$(MACHINE)" = "arm64" ] || [ "$(MACHINE)" = "aarch64" ]; then \
-		docker run --rm --name rocksdb_linux_s390x-be --platform linux/arm64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=s390x-linux-gnu evolvedbinary/rocksjava:alpine3_arm64v8-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	else \
-		docker run --rm --name rocksdb_linux_s390x-be --platform linux/s390x --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:ubuntu18_s390x-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	fi
+	docker run --rm --name rocksdb_linux_s390x-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=s390x-linux-gnu $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerriscv64:
 	mkdir -p java/target
-	if [ "$(MACHINE)" = "arm64" ] || [ "$(MACHINE)" = "aarch64" ]; then \
-		docker run --rm --name rocksdb_linux_riscv64-be --platform linux/arm64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=riscv64-linux-gnu evolvedbinary/rocksjava:alpine3_arm64v8-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	else \
-		docker run --rm --name rocksdb_linux_riscv64-be --platform linux/riscv64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:ubuntu20_riscv64-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	fi
+	docker run --rm --name rocksdb_linux_riscv64-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=riscv64-linux-gnu $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerx86musl:
 	mkdir -p java/target
-	if [ "$(MACHINE)" = "arm64" ] || [ "$(MACHINE)" = "aarch64" ]; then \
-		docker run --rm --name rocksdb_linux_x86-musl-be --platform linux/arm64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=x86-linux-musl evolvedbinary/rocksjava:alpine3_arm64v8-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	else \
-		docker run --rm --name rocksdb_linux_x86-musl-be --platform linux/386 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:alpine3_x86-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	fi
+	docker run --rm --name rocksdb_linux_x86-musl-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=x86-linux-musl $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerx86_64musl:
 	mkdir -p java/target
-	if [ "$(MACHINE)" = "arm64" ] || [ "$(MACHINE)" = "aarch64" ]; then \
-		docker run --rm --name rocksdb_linux_x64-musl-be --platform linux/arm64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=x86_64-linux-musl evolvedbinary/rocksjava:alpine3_arm64v8-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	else \
-		docker run --rm --name rocksdb_linux_x64-musl-be --platform linux/amd64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:alpine3_x64-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	fi
+	docker run --rm --name rocksdb_linux_x64-musl-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=x86_64-linux-musl $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerppc64lemusl:
 	mkdir -p java/target
-	if [ "$(MACHINE)" = "arm64" ] || [ "$(MACHINE)" = "aarch64" ]; then \
-		docker run --rm --name rocksdb_linux_ppc64le-musl-be --platform linux/arm64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=powerpc64le-linux-musl evolvedbinary/rocksjava:alpine3_arm64v8-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	else \
-		docker run --rm --name rocksdb_linux_ppc64le-musl-be --platform linux/ppc64le --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:alpine3_ppc64le-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	fi
+	docker run --rm --name rocksdb_linux_ppc64le-musl-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=powerpc64le-linux-musl $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerarm64v8musl:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_arm64v8-musl-be --platform linux/arm64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:alpine3_arm64v8-be /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_arm64v8-musl-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=aarch64-linux-musl $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockers390xmusl:
 	mkdir -p java/target
-	if [ "$(MACHINE)" = "arm64" ] || [ "$(MACHINE)" = "aarch64" ]; then \
-		docker run --rm --name rocksdb_linux_s390x-musl-be --platform linux/arm64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=s390x-linux-musl evolvedbinary/rocksjava:alpine3_arm64v8-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	else \
-		docker run --rm --name rocksdb_linux_s390x-musl-be --platform linux/s390x --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:alpine3_s390x-be /rocksdb-host/java/crossbuild/docker-build-linux.sh; \
-	fi
+	docker run --rm --name rocksdb_linux_s390x-musl-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=s390x-linux-musl $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 ROCKSDB_JAVA_RELEASE_CLASSIFIERS = \
 	javadoc \

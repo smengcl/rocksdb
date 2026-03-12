@@ -41,9 +41,28 @@ rm -rf /rocksdb-local-build/*
 cp -r /rocksdb-host/* /rocksdb-local-build
 cd /rocksdb-local-build
 
-# Optional cross-compilation mode for building Linux JNI artifacts from an arm64 host.
+# Optional cross-compilation mode for building Linux JNI artifacts via Zig using
+# explicit *-linux-gnu and *-linux-musl target triples.
 if [ -n "${ROCKSDB_CROSS_TRIPLE}" ]; then
   case "${ROCKSDB_CROSS_TRIPLE}" in
+    aarch64-linux-gnu)
+      CROSS_SYSTEM_PROCESSOR=aarch64
+      CROSS_TARGET_ARCHITECTURE=aarch64
+      CROSS_MACHINE=aarch64
+      CROSS_ARCH=64
+      CROSS_JNI_LIBC=
+      CROSS_ZIG_CPU=
+      CROSS_ZIG_STRIP_MARCH=
+      ;;
+    aarch64-linux-musl)
+      CROSS_SYSTEM_PROCESSOR=aarch64
+      CROSS_TARGET_ARCHITECTURE=aarch64
+      CROSS_MACHINE=aarch64
+      CROSS_ARCH=64
+      CROSS_JNI_LIBC=musl
+      CROSS_ZIG_CPU=
+      CROSS_ZIG_STRIP_MARCH=
+      ;;
     x86-linux-gnu)
       CROSS_SYSTEM_PROCESSOR=x86
       CROSS_TARGET_ARCHITECTURE=x86
@@ -143,8 +162,20 @@ if [ -n "${ROCKSDB_CROSS_TRIPLE}" ]; then
   echo "Configuring cross-compile toolchain for ${ROCKSDB_CROSS_TRIPLE}"
 
   ROCKSDB_ZIG_VERSION="${ROCKSDB_ZIG_VERSION:-0.15.2}"
-  ROCKSDB_ZIG_ROOT="/tmp/zig-aarch64-linux-${ROCKSDB_ZIG_VERSION}"
-  ROCKSDB_ZIG_URL="${ROCKSDB_ZIG_URL:-https://ziglang.org/download/${ROCKSDB_ZIG_VERSION}/zig-aarch64-linux-${ROCKSDB_ZIG_VERSION}.tar.xz}"
+  case "$(uname -m)" in
+    aarch64|arm64)
+      ROCKSDB_ZIG_HOST_ARCH=aarch64
+      ;;
+    x86_64|amd64)
+      ROCKSDB_ZIG_HOST_ARCH=x86_64
+      ;;
+    *)
+      echo "Unsupported Zig host architecture: $(uname -m)"
+      exit 1
+      ;;
+  esac
+  ROCKSDB_ZIG_ROOT="/tmp/zig-${ROCKSDB_ZIG_HOST_ARCH}-linux-${ROCKSDB_ZIG_VERSION}"
+  ROCKSDB_ZIG_URL="${ROCKSDB_ZIG_URL:-https://ziglang.org/download/${ROCKSDB_ZIG_VERSION}/zig-${ROCKSDB_ZIG_HOST_ARCH}-linux-${ROCKSDB_ZIG_VERSION}.tar.xz}"
 
   if [ ! -x "${ROCKSDB_ZIG_ROOT}/zig" ]; then
     if hash apk 2>/dev/null; then
@@ -154,8 +185,8 @@ if [ -n "${ROCKSDB_CROSS_TRIPLE}" ]; then
       exit 1
     fi
 
-    curl -fsSL "${ROCKSDB_ZIG_URL}" -o "/tmp/zig-aarch64-linux-${ROCKSDB_ZIG_VERSION}.tar.xz"
-    tar -C /tmp -xf "/tmp/zig-aarch64-linux-${ROCKSDB_ZIG_VERSION}.tar.xz"
+    curl -fsSL "${ROCKSDB_ZIG_URL}" -o "/tmp/zig-${ROCKSDB_ZIG_HOST_ARCH}-linux-${ROCKSDB_ZIG_VERSION}.tar.xz"
+    tar -C /tmp -xf "/tmp/zig-${ROCKSDB_ZIG_HOST_ARCH}-linux-${ROCKSDB_ZIG_VERSION}.tar.xz"
   fi
 
   CROSS_WRAPPERS_DIR=/tmp/rocksdb-zig-cross

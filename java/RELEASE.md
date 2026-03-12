@@ -16,8 +16,8 @@ From RocksDB's root source directory, run:
 This is the supported one-command fat-jar build. It builds:
 
  * macOS: `osx-arm64`, `osx-x86_64`
- * Linux glibc: `linux32`, `linux64`, `linux-aarch64`, `linux-ppc64le`, `linux-s390x`, `linux-riscv64`
- * Linux musl: `linux32-musl`, `linux64-musl`, `linux-aarch64-musl`, `linux-ppc64le-musl`, `linux-s390x-musl`
+ * Linux glibc via Zig `*-linux-gnu`: `linux32`, `linux64`, `linux-aarch64`, `linux-ppc64le`, `linux-s390x`, `linux-riscv64`
+ * Linux musl via Zig `*-linux-musl`: `linux32-musl`, `linux64-musl`, `linux-aarch64-musl`, `linux-ppc64le-musl`, `linux-s390x-musl`
  * Windows: `win64`
 
 For compatibility, `make rocksdbjavastaticreleasedocker` now delegates to the same fat-jar target.
