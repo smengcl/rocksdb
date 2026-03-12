@@ -2484,7 +2484,7 @@ rocksdbjavastaticreleasedocker:
 
 rocksdbjavastaticpreparegnucrossworkdir:
 	@chmod -R u+rwX "$(ROCKSDB_GNU_CROSS_CACHE)" 2>/dev/null || true; \
-	WORKDIR="$$(ROCKSDB_GNU_CROSS_WORK_SIZE="$(ROCKSDB_GNU_CROSS_WORK_SIZE)" sh java/crossbuild/prepare-gnu-cross-workdir.sh "$(ROCKSDB_GNU_CROSS_CACHE)")"; \
+	WORKDIR="$$(ROCKSDB_GNU_CROSS_WORK_SIZE="$(ROCKSDB_GNU_CROSS_WORK_SIZE)" bash java/crossbuild/prepare-gnu-cross-workdir.sh "$(ROCKSDB_GNU_CROSS_CACHE)")"; \
 	test "$$WORKDIR" = "$(ROCKSDB_GNU_CROSS_WORK_HOST)"
 
 rocksdbjavastaticpreparegnuccrossmusltoolchains:
