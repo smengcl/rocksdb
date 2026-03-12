@@ -41,177 +41,27 @@ rm -rf /rocksdb-local-build/*
 cp -r /rocksdb-host/* /rocksdb-local-build
 cd /rocksdb-local-build
 
-# Optional cross-compilation mode for building Linux JNI artifacts from an arm64 host.
-if [ -n "${ROCKSDB_CROSS_TRIPLE}" ]; then
-  case "${ROCKSDB_CROSS_TRIPLE}" in
-    x86-linux-gnu)
-      CROSS_SYSTEM_PROCESSOR=x86
-      CROSS_TARGET_ARCHITECTURE=x86
-      CROSS_MACHINE=x86
-      CROSS_ARCH=32
-      CROSS_JNI_LIBC=
-      CROSS_ZIG_CPU=
-      CROSS_ZIG_STRIP_MARCH=
-      ;;
-    x86-linux-musl)
-      CROSS_SYSTEM_PROCESSOR=x86
-      CROSS_TARGET_ARCHITECTURE=x86
-      CROSS_MACHINE=x86
-      CROSS_ARCH=32
-      CROSS_JNI_LIBC=musl
-      CROSS_ZIG_CPU=
-      CROSS_ZIG_STRIP_MARCH=
-      ;;
-    x86_64-linux-gnu)
-      CROSS_SYSTEM_PROCESSOR=x86_64
-      CROSS_TARGET_ARCHITECTURE=x86_64
-      CROSS_MACHINE=x86_64
-      CROSS_ARCH=64
-      CROSS_JNI_LIBC=
-      CROSS_ZIG_CPU=
-      CROSS_ZIG_STRIP_MARCH=
-      ;;
-    x86_64-linux-musl)
-      CROSS_SYSTEM_PROCESSOR=x86_64
-      CROSS_TARGET_ARCHITECTURE=x86_64
-      CROSS_MACHINE=x86_64
-      CROSS_ARCH=64
-      CROSS_JNI_LIBC=musl
-      CROSS_ZIG_CPU=
-      CROSS_ZIG_STRIP_MARCH=
-      ;;
-    powerpc64le-linux-gnu)
-      CROSS_SYSTEM_PROCESSOR=ppc64le
-      CROSS_TARGET_ARCHITECTURE=ppc64le
-      CROSS_MACHINE=ppc64le
-      CROSS_ARCH=64
-      CROSS_JNI_LIBC=
-      CROSS_ZIG_CPU=
-      CROSS_ZIG_STRIP_MARCH=
-      ;;
-    powerpc64le-linux-musl)
-      CROSS_SYSTEM_PROCESSOR=ppc64le
-      CROSS_TARGET_ARCHITECTURE=ppc64le
-      CROSS_MACHINE=ppc64le
-      CROSS_ARCH=64
-      CROSS_JNI_LIBC=musl
-      CROSS_ZIG_CPU=
-      CROSS_ZIG_STRIP_MARCH=
-      ;;
-    s390x-linux-gnu)
-      CROSS_SYSTEM_PROCESSOR=s390x
-      CROSS_TARGET_ARCHITECTURE=s390x
-      CROSS_MACHINE=s390x
-      CROSS_ARCH=64
-      CROSS_JNI_LIBC=
-      CROSS_ZIG_CPU=arch8
-      CROSS_ZIG_STRIP_MARCH=
-      ;;
-    s390x-linux-musl)
-      CROSS_SYSTEM_PROCESSOR=s390x
-      CROSS_TARGET_ARCHITECTURE=s390x
-      CROSS_MACHINE=s390x
-      CROSS_ARCH=64
-      CROSS_JNI_LIBC=musl
-      CROSS_ZIG_CPU=arch8
-      CROSS_ZIG_STRIP_MARCH=
-      ;;
-    riscv64-linux-gnu)
-      CROSS_SYSTEM_PROCESSOR=riscv64
-      CROSS_TARGET_ARCHITECTURE=riscv64
-      CROSS_MACHINE=riscv64
-      CROSS_ARCH=64
-      CROSS_JNI_LIBC=
-      CROSS_ZIG_CPU=generic_rv64+d+f+c+m+a
-      CROSS_ZIG_STRIP_MARCH=rv64gc
-      ;;
-    riscv64-linux-musl)
-      CROSS_SYSTEM_PROCESSOR=riscv64
-      CROSS_TARGET_ARCHITECTURE=riscv64
-      CROSS_MACHINE=riscv64
-      CROSS_ARCH=64
-      CROSS_JNI_LIBC=musl
-      CROSS_ZIG_CPU=generic_rv64+d+f+c+m+a
-      CROSS_ZIG_STRIP_MARCH=rv64gc
-      ;;
-    *)
-      echo "Unsupported ROCKSDB_CROSS_TRIPLE: ${ROCKSDB_CROSS_TRIPLE}"
-      exit 1
-      ;;
-  esac
+# Optional GNU cross-compilation mode for building Linux JNI artifacts from an arm64 host.
+if [ -n "${ROCKSDB_CROSS_TRIPLE:-}" ]; then
+  echo "Configuring GNU cross-compile toolchain for ${ROCKSDB_CROSS_TRIPLE}"
+  # shellcheck source=/dev/null
+  source java/crossbuild/setup-gnu-cross.sh
+  rocksdb_setup_gnu_cross_toolchain
 
-  echo "Configuring cross-compile toolchain for ${ROCKSDB_CROSS_TRIPLE}"
-
-  ROCKSDB_ZIG_VERSION="${ROCKSDB_ZIG_VERSION:-0.15.2}"
-  ROCKSDB_ZIG_ROOT="/tmp/zig-aarch64-linux-${ROCKSDB_ZIG_VERSION}"
-  ROCKSDB_ZIG_URL="${ROCKSDB_ZIG_URL:-https://ziglang.org/download/${ROCKSDB_ZIG_VERSION}/zig-aarch64-linux-${ROCKSDB_ZIG_VERSION}.tar.xz}"
-
-  if [ ! -x "${ROCKSDB_ZIG_ROOT}/zig" ]; then
-    if hash apk 2>/dev/null; then
-      apk add --no-cache curl xz elfutils
-    else
-      echo "curl, xz, and elfutils are required to fetch Zig ${ROCKSDB_ZIG_VERSION}"
-      exit 1
-    fi
-
-    curl -fsSL "${ROCKSDB_ZIG_URL}" -o "/tmp/zig-aarch64-linux-${ROCKSDB_ZIG_VERSION}.tar.xz"
-    tar -C /tmp -xf "/tmp/zig-aarch64-linux-${ROCKSDB_ZIG_VERSION}.tar.xz"
+  if [ "${ROCKSDB_PREPARE_GNU_CROSS_TOOLCHAIN_ONLY:-0}" = "1" ]; then
+    echo "Prepared GNU cross toolchain cache for ${ROCKSDB_CROSS_TRIPLE}"
+    exit 0
   fi
-
-  CROSS_WRAPPERS_DIR=/tmp/rocksdb-zig-cross
-  mkdir -p "${CROSS_WRAPPERS_DIR}"
-
-  cat > "${CROSS_WRAPPERS_DIR}/cc" <<EOF
-#!/usr/bin/env bash
-strip_march="${CROSS_ZIG_STRIP_MARCH}"
-args=()
-for arg in "\$@"; do
-  if [ -n "\${strip_march}" ] && { [ "\$arg" = "-march=\${strip_march}" ] || [ "\$arg" = "-mcpu=\${strip_march}" ]; }; then
-    continue
-  fi
-  args+=("\$arg")
-done
-exec "${ROCKSDB_ZIG_ROOT}/zig" cc -target ${ROCKSDB_CROSS_TRIPLE} ${CROSS_ZIG_CPU:+-mcpu=${CROSS_ZIG_CPU}} "\${args[@]}"
-EOF
-
-  cat > "${CROSS_WRAPPERS_DIR}/cxx" <<EOF
-#!/usr/bin/env bash
-strip_march="${CROSS_ZIG_STRIP_MARCH}"
-args=()
-for arg in "\$@"; do
-  if [ -n "\${strip_march}" ] && { [ "\$arg" = "-march=\${strip_march}" ] || [ "\$arg" = "-mcpu=\${strip_march}" ]; }; then
-    continue
-  fi
-  args+=("\$arg")
-done
-exec "${ROCKSDB_ZIG_ROOT}/zig" c++ -target ${ROCKSDB_CROSS_TRIPLE} ${CROSS_ZIG_CPU:+-mcpu=${CROSS_ZIG_CPU}} "\${args[@]}"
-EOF
-
-  chmod +x "${CROSS_WRAPPERS_DIR}/cc" "${CROSS_WRAPPERS_DIR}/cxx"
-  export CC="${CROSS_WRAPPERS_DIR}/cc"
-  export CXX="${CROSS_WRAPPERS_DIR}/cxx"
-  export TARGET_ARCHITECTURE="${CROSS_TARGET_ARCHITECTURE}"
-  export MACHINE="${CROSS_MACHINE}"
-  export ARCH="${CROSS_ARCH}"
-  export STRIP=eu-strip
-  export STRIPFLAGS=
-  export ROCKSDB_CROSS_LIBC="${CROSS_JNI_LIBC:-gnu}"
-  if [ -n "${CROSS_JNI_LIBC}" ]; then
-    export JNI_LIBC="${CROSS_JNI_LIBC}"
-  else
-    unset JNI_LIBC
-  fi
-  export PLATFORM_CMAKE_FLAGS="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=${CROSS_SYSTEM_PROCESSOR} -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY"
 fi
 
-# Keep the historical GCC workaround for regular builds, and use clang-safe flags for zig cross builds.
-if [ -z "${EXTRA_CXXFLAGS}" ]; then
+# Keep the historical GCC workaround for regular builds.
+if [ -z "${EXTRA_CXXFLAGS:-}" ]; then
   EXTRA_CXXFLAGS=""
 fi
-if [ -z "${EXTRA_CFLAGS}" ]; then
+if [ -z "${EXTRA_CFLAGS:-}" ]; then
   EXTRA_CFLAGS=""
 fi
-if [ -z "${EXTRA_LDFLAGS}" ]; then
+if [ -z "${EXTRA_LDFLAGS:-}" ]; then
   EXTRA_LDFLAGS=""
 fi
 
@@ -219,16 +69,7 @@ EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS} -fno-sanitize=undefined -fno-sanitize=address 
 EXTRA_CFLAGS="${EXTRA_CFLAGS} -fno-sanitize=undefined -fno-sanitize=address -fno-sanitize=thread"
 EXTRA_LDFLAGS="${EXTRA_LDFLAGS} -fno-sanitize=undefined -fno-sanitize=address -fno-sanitize=thread"
 
-if [ -n "${ROCKSDB_CROSS_TRIPLE}" ]; then
-  EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS} -Wno-error=unknown-warning-option -Wno-unknown-warning-option"
-  EXTRA_CFLAGS="${EXTRA_CFLAGS} -Wno-error=unknown-warning-option -Wno-unknown-warning-option"
-  case "${ROCKSDB_CROSS_TRIPLE}" in
-    x86-linux-gnu|x86-linux-musl)
-      EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS} -Wno-error=shorten-64-to-32 -Wno-shorten-64-to-32 -Wno-error=sync-alignment"
-      EXTRA_CFLAGS="${EXTRA_CFLAGS} -Wno-error=shorten-64-to-32 -Wno-shorten-64-to-32 -Wno-error=sync-alignment"
-      ;;
-  esac
-else
+if [ -z "${ROCKSDB_CROSS_TRIPLE:-}" ]; then
   EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS} -Wno-error=restrict"
 fi
 
@@ -253,6 +94,56 @@ validate_no_sanitizer_refs() {
   if printf '%s\n' "${symbol_dump}" | grep -Eq "${pattern}"; then
     echo "Unexpected sanitizer runtime reference in ${native_path}"
     printf '%s\n' "${symbol_dump}" | grep -E "${pattern}" || true
+    exit 1
+  fi
+}
+
+validate_gnu_cxx_abi() {
+  local native_path="$1"
+  local symbol_dump=""
+  local dynamic_dump=""
+  local string_dump=""
+  local has_gnu_abi=0
+  local libcxx_symbol_pattern='NSt3__1|St3__1'
+  local gnucxx_symbol_pattern='St7__cxx11'
+
+  if hash nm 2>/dev/null; then
+    symbol_dump="$(nm -D "${native_path}" 2>/dev/null || true)"
+  elif hash readelf 2>/dev/null; then
+    symbol_dump="$(readelf -Ws "${native_path}" 2>/dev/null || true)"
+  fi
+
+  if printf '%s\n' "${symbol_dump}" | grep -Eq "${libcxx_symbol_pattern}"; then
+    echo "Unexpected libc++ symbol namespace in ${native_path}"
+    printf '%s\n' "${symbol_dump}" | grep -E "${libcxx_symbol_pattern}" | head -n20 || true
+    exit 1
+  fi
+
+  if printf '%s\n' "${symbol_dump}" | grep -Eq "${gnucxx_symbol_pattern}"; then
+    has_gnu_abi=1
+  fi
+
+  if hash readelf 2>/dev/null; then
+    dynamic_dump="$(readelf -d "${native_path}" 2>/dev/null || true)"
+    if printf '%s\n' "${dynamic_dump}" | grep -Eq 'libstdc\+\+\.so\.6'; then
+      has_gnu_abi=1
+    fi
+  fi
+
+  if hash strings 2>/dev/null; then
+    string_dump="$(strings "${native_path}" 2>/dev/null || true)"
+    if printf '%s\n' "${string_dump}" | grep -Eq 'libc\+\+|libc\+\+abi'; then
+      echo "Unexpected libc++ runtime reference in ${native_path}"
+      printf '%s\n' "${string_dump}" | grep -E 'libc\+\+|libc\+\+abi' | head -n20 || true
+      exit 1
+    fi
+    if printf '%s\n' "${string_dump}" | grep -Eq 'libstdc\+\+\.so\.6'; then
+      has_gnu_abi=1
+    fi
+  fi
+
+  if [ "${has_gnu_abi}" -eq 0 ]; then
+    echo "Could not confirm GNU libstdc++ ABI in ${native_path}"
     exit 1
   fi
 }
@@ -360,6 +251,7 @@ fi
 for native_artifact in "${native_artifacts[@]}"; do
   validate_native_artifact "${native_artifact}"
   validate_no_sanitizer_refs "${native_artifact}"
+  validate_gnu_cxx_abi "${native_artifact}"
 done
 
 if [ "${ROCKSDB_COPY_JARS:-1}" = "1" ]; then
