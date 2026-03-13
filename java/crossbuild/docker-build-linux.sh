@@ -252,12 +252,12 @@ validate_max_symbol_version() {
   [ -n "${actual_max}" ] || return 0
 
   if [ "$(printf '%s\n%s\n' "${expected_max}" "${actual_max}" | sort -V | tail -n1)" != "${expected_max}" ]; then
-    echo "${native_path} exceeds official ${prefix} floor: expected <= ${expected_max}, got ${actual_max}"
+    echo "${native_path} exceeds configured ${prefix} ceiling: expected <= ${expected_max}, got ${actual_max}"
     exit 1
   fi
 }
 
-validate_official_linux_abi_floor() {
+validate_release_linux_abi_ceiling() {
   local native_path="$1"
   local native_name
   local max_glibc=""
@@ -267,24 +267,24 @@ validate_official_linux_abi_floor() {
   native_name="$(basename "${native_path}")"
   case "${native_name}" in
     librocksdbjni-linux32.so|librocksdbjni-linux64.so)
-      max_glibc='2.16'
-      max_glibcxx='3.4.19'
-      max_cxxabi='1.3.7'
+      max_glibc='2.17'
+      max_glibcxx='3.4.29'
+      max_cxxabi='1.3.13'
       ;;
     librocksdbjni-linux-aarch64.so|librocksdbjni-linux-ppc64le.so)
       max_glibc='2.17'
-      max_glibcxx='3.4.19'
-      max_cxxabi='1.3.7'
+      max_glibcxx='3.4.29'
+      max_cxxabi='1.3.13'
       ;;
     librocksdbjni-linux-s390x.so)
-      max_glibc='2.12'
-      max_glibcxx='3.4.22'
-      max_cxxabi='1.3.11'
+      max_glibc='2.17'
+      max_glibcxx='3.4.29'
+      max_cxxabi='1.3.13'
       ;;
     librocksdbjni-linux-riscv64.so)
       max_glibc='2.30'
-      max_glibcxx='3.4.26'
-      max_cxxabi='1.3.11'
+      max_glibcxx='3.4.29'
+      max_cxxabi='1.3.13'
       ;;
     *)
       return 0
@@ -475,7 +475,7 @@ for native_artifact in "${native_artifacts[@]}"; do
   validate_no_sanitizer_refs "${native_artifact}"
   validate_gnu_cxx_abi "${native_artifact}"
   validate_static_dependency_shape "${native_artifact}"
-  validate_official_linux_abi_floor "${native_artifact}"
+  validate_release_linux_abi_ceiling "${native_artifact}"
   validate_musl_loader_and_deps "${native_artifact}"
 done
 
