@@ -446,6 +446,103 @@ jobs:
             fi
           }
 
+          extract_max_version() {
+            local native="$1"
+            local prefix="$2"
+            objdump -T "${native}" 2>/dev/null | grep -Eo "${prefix}_[0-9]+\.[0-9]+(\.[0-9]+)?" | sed "s/^${prefix}_//" | sort -Vu | tail -n1
+          }
+
+          validate_max_symbol_version() {
+            local native="$1"
+            local prefix="$2"
+            local expected_max="$3"
+            local actual_max
+
+            [ -n "${expected_max}" ] || return 0
+            actual_max="$(extract_max_version "${native}" "${prefix}")"
+            [ -n "${actual_max}" ] || return 0
+
+            if [ "$(printf '%s\n%s\n' "${expected_max}" "${actual_max}" | sort -V | tail -n1)" != "${expected_max}" ]; then
+              echo "${native} exceeds official ${prefix} floor: expected <= ${expected_max}, got ${actual_max}"
+              exit 1
+            fi
+          }
+
+          validate_official_linux_abi_floor() {
+            local native="$1"
+            local base
+            local max_glibc=""
+            local max_glibcxx=""
+            local max_cxxabi=""
+
+            base="$(basename "${native}")"
+            case "${base}" in
+              librocksdbjni-linux32.so|librocksdbjni-linux64.so)
+                max_glibc='2.16'
+                max_glibcxx='3.4.19'
+                max_cxxabi='1.3.7'
+                ;;
+              librocksdbjni-linux-aarch64.so|librocksdbjni-linux-ppc64le.so)
+                max_glibc='2.17'
+                max_glibcxx='3.4.19'
+                max_cxxabi='1.3.7'
+                ;;
+              librocksdbjni-linux-s390x.so)
+                max_glibc='2.12'
+                max_glibcxx='3.4.22'
+                max_cxxabi='1.3.11'
+                ;;
+              librocksdbjni-linux-riscv64.so)
+                max_glibc='2.30'
+                max_glibcxx='3.4.26'
+                max_cxxabi='1.3.11'
+                ;;
+              *)
+                return 0
+                ;;
+            esac
+
+            validate_max_symbol_version "${native}" GLIBC "${max_glibc}"
+            validate_max_symbol_version "${native}" GLIBCXX "${max_glibcxx}"
+            validate_max_symbol_version "${native}" CXXABI "${max_cxxabi}"
+          }
+
+          validate_musl_loader_and_deps() {
+            local native="$1"
+            local base
+            local expected_loader=""
+
+            base="$(basename "${native}")"
+            case "${base}" in
+              librocksdbjni-linux32-musl.so)
+                expected_loader='libc.musl-x86.so.1'
+                ;;
+              librocksdbjni-linux64-musl.so)
+                expected_loader='libc.musl-x86_64.so.1'
+                ;;
+              librocksdbjni-linux-aarch64-musl.so)
+                expected_loader='libc.musl-aarch64.so.1'
+                ;;
+              librocksdbjni-linux-ppc64le-musl.so)
+                expected_loader='libc.musl-ppc64le.so.1'
+                ;;
+              librocksdbjni-linux-s390x-musl.so)
+                expected_loader='libc.musl-s390x.so.1'
+                ;;
+              *)
+                return 0
+                ;;
+            esac
+
+            if ! objdump -p "${native}" | grep -Eq "${expected_loader}"; then
+              echo "Unexpected musl loader dependency in ${native}; expected ${expected_loader}"
+              objdump -p "${native}" | grep -E 'NEEDED|INTERP' || true
+              exit 1
+            fi
+            objdump -p "${native}" | grep -Eq 'libstdc\+\+\.so\.6'
+            objdump -p "${native}" | grep -Eq 'libgcc_s\.so\.1'
+          }
+
           mkdir -p java/target output
           cp "$(find_one artifacts/linux-x86 'librocksdbjni-linux32.so')" java/target/
           cp "$(find_one artifacts/linux-x64 'librocksdbjni-linux64.so')" java/target/
@@ -465,6 +562,8 @@ jobs:
           for native in java/target/librocksdbjni-linux*.so; do
             ! nm -D "${native}" | grep -Eq '__ubsan_|__asan_|__tsan_'
             validate_gnu_cxx_abi "${native}"
+            validate_official_linux_abi_floor "${native}"
+            validate_musl_loader_and_deps "${native}"
           done
 
           make DEBUG_LEVEL=0 rocksdbjava_javadocs_jar rocksdbjava_sources_jar rocksdbjavastaticpreparepomartifact

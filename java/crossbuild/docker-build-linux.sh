@@ -148,6 +148,153 @@ validate_gnu_cxx_abi() {
   fi
 }
 
+extract_max_version() {
+  local native_path="$1"
+  local prefix="$2"
+  local dump=""
+  local pattern="${prefix}_[0-9]+\\.[0-9]+(\\.[0-9]+)?"
+
+  if hash objdump 2>/dev/null; then
+    dump="$(objdump -T "${native_path}" 2>/dev/null || true)"
+  elif hash readelf 2>/dev/null; then
+    dump="$(readelf -Ws "${native_path}" 2>/dev/null || true)"
+  else
+    echo ""
+    return 0
+  fi
+
+  printf '%s\n' "${dump}" | grep -Eo "${pattern}" | sed "s/^${prefix}_//" | sort -Vu | tail -n1
+}
+
+validate_max_symbol_version() {
+  local native_path="$1"
+  local prefix="$2"
+  local expected_max="$3"
+  local actual_max=""
+
+  [ -n "${expected_max}" ] || return 0
+
+  actual_max="$(extract_max_version "${native_path}" "${prefix}")"
+  [ -n "${actual_max}" ] || return 0
+
+  if [ "$(printf '%s\n%s\n' "${expected_max}" "${actual_max}" | sort -V | tail -n1)" != "${expected_max}" ]; then
+    echo "${native_path} exceeds official ${prefix} floor: expected <= ${expected_max}, got ${actual_max}"
+    exit 1
+  fi
+}
+
+validate_official_linux_abi_floor() {
+  local native_path="$1"
+  local native_name
+  local max_glibc=""
+  local max_glibcxx=""
+  local max_cxxabi=""
+
+  native_name="$(basename "${native_path}")"
+  case "${native_name}" in
+    librocksdbjni-linux32.so|librocksdbjni-linux64.so)
+      max_glibc='2.16'
+      max_glibcxx='3.4.19'
+      max_cxxabi='1.3.7'
+      ;;
+    librocksdbjni-linux-aarch64.so|librocksdbjni-linux-ppc64le.so)
+      max_glibc='2.17'
+      max_glibcxx='3.4.19'
+      max_cxxabi='1.3.7'
+      ;;
+    librocksdbjni-linux-s390x.so)
+      max_glibc='2.12'
+      max_glibcxx='3.4.22'
+      max_cxxabi='1.3.11'
+      ;;
+    librocksdbjni-linux-riscv64.so)
+      max_glibc='2.30'
+      max_glibcxx='3.4.26'
+      max_cxxabi='1.3.11'
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  validate_max_symbol_version "${native_path}" GLIBC "${max_glibc}"
+  validate_max_symbol_version "${native_path}" GLIBCXX "${max_glibcxx}"
+  validate_max_symbol_version "${native_path}" CXXABI "${max_cxxabi}"
+}
+
+validate_musl_loader_and_deps() {
+  local native_path="$1"
+  local native_name
+  local expected_loader=""
+  local dynamic_dump=""
+  local string_dump=""
+
+  native_name="$(basename "${native_path}")"
+  case "${native_name}" in
+    librocksdbjni-linux32-musl.so)
+      expected_loader='libc.musl-x86.so.1'
+      ;;
+    librocksdbjni-linux64-musl.so)
+      expected_loader='libc.musl-x86_64.so.1'
+      ;;
+    librocksdbjni-linux-aarch64-musl.so)
+      expected_loader='libc.musl-aarch64.so.1'
+      ;;
+    librocksdbjni-linux-ppc64le-musl.so)
+      expected_loader='libc.musl-ppc64le.so.1'
+      ;;
+    librocksdbjni-linux-s390x-musl.so)
+      expected_loader='libc.musl-s390x.so.1'
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  if hash objdump 2>/dev/null; then
+    dynamic_dump="$(objdump -p "${native_path}" 2>/dev/null || true)"
+  elif hash readelf 2>/dev/null; then
+    dynamic_dump="$(readelf -d "${native_path}" 2>/dev/null || true)"
+  fi
+
+  if [ -n "${dynamic_dump}" ]; then
+    if ! printf '%s\n' "${dynamic_dump}" | grep -Eq "${expected_loader}"; then
+      echo "Unexpected musl loader dependency in ${native_path}; expected ${expected_loader}"
+      printf '%s\n' "${dynamic_dump}" | grep -E 'NEEDED|INTERP' || true
+      exit 1
+    fi
+    if ! printf '%s\n' "${dynamic_dump}" | grep -Eq 'libstdc\+\+\.so\.6'; then
+      echo "Missing libstdc++.so.6 dependency in ${native_path}"
+      exit 1
+    fi
+    if ! printf '%s\n' "${dynamic_dump}" | grep -Eq 'libgcc_s\.so\.1'; then
+      echo "Missing libgcc_s.so.1 dependency in ${native_path}"
+      exit 1
+    fi
+    return 0
+  fi
+
+  if hash strings 2>/dev/null; then
+    string_dump="$(strings "${native_path}" 2>/dev/null || true)"
+    if ! printf '%s\n' "${string_dump}" | grep -Eq "${expected_loader}"; then
+      echo "Unexpected musl loader marker in ${native_path}; expected ${expected_loader}"
+      exit 1
+    fi
+    if ! printf '%s\n' "${string_dump}" | grep -Eq 'libstdc\+\+\.so\.6'; then
+      echo "Missing libstdc++.so.6 marker in ${native_path}"
+      exit 1
+    fi
+    if ! printf '%s\n' "${string_dump}" | grep -Eq 'libgcc_s\.so\.1'; then
+      echo "Missing libgcc_s.so.1 marker in ${native_path}"
+      exit 1
+    fi
+    return 0
+  fi
+
+  echo "Neither objdump/readelf nor strings is available to validate musl dependency shape in ${native_path}"
+  exit 1
+}
+
 validate_native_artifact() {
   local native_path="$1"
   local native_name
@@ -252,6 +399,8 @@ for native_artifact in "${native_artifacts[@]}"; do
   validate_native_artifact "${native_artifact}"
   validate_no_sanitizer_refs "${native_artifact}"
   validate_gnu_cxx_abi "${native_artifact}"
+  validate_official_linux_abi_floor "${native_artifact}"
+  validate_musl_loader_and_deps "${native_artifact}"
 done
 
 if [ "${ROCKSDB_COPY_JARS:-1}" = "1" ]; then
