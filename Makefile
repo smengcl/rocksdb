@@ -2408,6 +2408,8 @@ else
 ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM ?= linux/amd64
 ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE ?= evolvedbinary/rocksjava:alpine3_x64-be
 endif
+ROCKSDB_JAVA_LINUX_X64_GNU_DOCKER_PLATFORM ?= linux/amd64
+ROCKSDB_JAVA_LINUX_X64_GNU_DOCKER_IMAGE ?= evolvedbinary/rocksjava:centos7_x64-be
 
 ROCKSDB_JAVA_FATJAR_BUILD_TARGETS = \
 	rocksdbjavastaticosx \
@@ -2479,7 +2481,7 @@ rocksdbjavastaticdockerx86:
 
 rocksdbjavastaticdockerx86_64:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_x64-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=x86_64-linux-gnu $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_x64-be --platform $(ROCKSDB_JAVA_LINUX_X64_GNU_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_VALIDATE_X86_64_GNU_ABI=1 --env ROCKSDB_DISABLE_SNAPPY=1 --env ROCKSDB_DISABLE_ZLIB=1 --env ROCKSDB_DISABLE_BZIP=1 --env ROCKSDB_DISABLE_LZ4=1 --env ROCKSDB_DISABLE_ZSTD=1 --env DISABLE_JEMALLOC=1 $(ROCKSDB_JAVA_LINUX_X64_GNU_DOCKER_IMAGE) /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerppc64le:
 	mkdir -p java/target

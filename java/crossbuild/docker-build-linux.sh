@@ -50,6 +50,7 @@ export XDG_CACHE_HOME=/rocksdb-local-build/.cache
 mkdir -p "${XDG_CACHE_HOME}"
 
 ROCKSDB_X86_64_GNU_GLIBC_MAX_VERSION=2.30
+ROCKSDB_X86_64_GNU_GLIBCXX_MAX_VERSION=3.4.19
 
 validate_x86_64_gnu_runtime_layout() {
   local toolchain_root="$1"
@@ -973,6 +974,8 @@ validate_x86_64_gnu_abi() {
   local symbol_dump
   local glibc_versions
   local max_glibc_version
+  local glibcxx_versions
+  local max_glibcxx_version
 
   if ! hash objdump 2>/dev/null; then
     echo "objdump is required to validate GNU C++ ABI details in ${native_path}"
@@ -992,6 +995,11 @@ validate_x86_64_gnu_abi() {
     exit 1
   fi
 
+  if printf '%s\n' "${dynamic_dump}" | grep -Eq 'NEEDED[[:space:]]+(libsnappy|libz|libbz2|liblz4|libzstd|libjemalloc)\.so'; then
+    echo "Unexpected dynamic compression or allocator dependency in ${native_path}"
+    exit 1
+  fi
+
   if ! printf '%s\n' "${symbol_dump}" | grep -Eq 'GLIBCXX_|CXXABI_'; then
     echo "Expected ${native_path} to reference GNU C++ ABI symbols"
     exit 1
@@ -999,6 +1007,18 @@ validate_x86_64_gnu_abi() {
 
   if printf '%s\n' "${symbol_dump}" | grep -Eq 'std::__1|St3__1'; then
     echo "Unexpected libc++ symbol namespace in ${native_path}"
+    exit 1
+  fi
+
+  glibcxx_versions=$(printf '%s\n' "${symbol_dump}" | grep -oE 'GLIBCXX_[0-9.]+' | sort -Vu || true)
+  if [ -z "${glibcxx_versions}" ]; then
+    echo "Could not determine libstdc++ symbol requirements for ${native_path}"
+    exit 1
+  fi
+
+  max_glibcxx_version=$(printf '%s\n' "${glibcxx_versions}" | sed 's/^GLIBCXX_//' | sort -V | tail -n1)
+  if ! version_le "${max_glibcxx_version}" "${ROCKSDB_X86_64_GNU_GLIBCXX_MAX_VERSION}"; then
+    echo "libstdc++ floor regression in ${native_path}: found GLIBCXX_${max_glibcxx_version}, expected <= GLIBCXX_${ROCKSDB_X86_64_GNU_GLIBCXX_MAX_VERSION}"
     exit 1
   fi
 
@@ -1053,7 +1073,7 @@ fi
 for native_artifact in "${native_artifacts[@]}"; do
   validate_native_artifact "${native_artifact}"
   validate_no_sanitizer_refs "${native_artifact}"
-  if [ "${ROCKSDB_CROSS_TRIPLE:-}" = "x86_64-linux-gnu" ] && [ "$(basename "${native_artifact}")" = "librocksdbjni-linux64.so" ]; then
+  if [ "$(basename "${native_artifact}")" = "librocksdbjni-linux64.so" ] && [ "${ROCKSDB_CROSS_TRIPLE:-}" = "x86_64-linux-gnu" -o "${ROCKSDB_VALIDATE_X86_64_GNU_ABI:-0}" = "1" ]; then
     validate_x86_64_gnu_abi "${native_artifact}"
   fi
 done
