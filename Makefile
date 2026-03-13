@@ -2487,6 +2487,12 @@ rocksdbjavastaticpreparegnucrossworkdir:
 	WORKDIR="$$(ROCKSDB_GNU_CROSS_WORK_SIZE="$(ROCKSDB_GNU_CROSS_WORK_SIZE)" bash java/crossbuild/prepare-gnu-cross-workdir.sh "$(ROCKSDB_GNU_CROSS_CACHE)")"; \
 	test "$$WORKDIR" = "$(ROCKSDB_GNU_CROSS_WORK_HOST)"
 
+ROCKSDB_GNU_CROSS_MUSL_PREPARE_TRIPLES ?= \
+	x86-linux-musl \
+	x86_64-linux-musl \
+	powerpc64le-linux-musl \
+	s390x-linux-musl
+
 rocksdbjavastaticpreparegnuccrossmusltoolchains:
 	@if [ "$(MACHINE)" != "arm64" ] && [ "$(MACHINE)" != "aarch64" ]; then \
 		echo "GNU musl cross-toolchain preparation is only supported on arm64 hosts"; \
@@ -2494,7 +2500,7 @@ rocksdbjavastaticpreparegnuccrossmusltoolchains:
 	fi
 	mkdir -p java/target "$(ROCKSDB_GNU_CROSS_CACHE)" "$(ROCKSDB_GNU_CROSS_CACHE)/apt-archives" "$(ROCKSDB_GNU_CROSS_CACHE)/apt-lists"
 	$(MAKE) rocksdbjavastaticpreparegnucrossworkdir
-	@for triple in x86-linux-musl x86_64-linux-musl powerpc64le-linux-musl s390x-linux-musl; do \
+	@for triple in $(ROCKSDB_GNU_CROSS_MUSL_PREPARE_TRIPLES); do \
 		$(call ROCKSDB_JAVA_GNU_CROSS_DOCKER_RUN,rocksdb_gnu_cross_prepare_$$triple,$$triple,--env ROCKSDB_PREPARE_GNU_CROSS_TOOLCHAIN_ONLY=1); \
 	done
 

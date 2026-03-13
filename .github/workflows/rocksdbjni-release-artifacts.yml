@@ -12,23 +12,83 @@ permissions:
   contents: read
 
 jobs:
-  prepare-musl-cross-toolchains:
+  prepare-musl-x86:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 360
+    timeout-minutes: 120
     env:
       DEBUG_LEVEL: 0
       J: "100%"
       ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
     steps:
       - uses: actions/checkout@v5
-      - name: Prepare GNU musl cross toolchains
+      - name: Prepare GNU musl cross toolchain (x86)
         run: |
           set -euxo pipefail
           mkdir -p "${ROCKSDB_GNU_CROSS_CACHE}"
-          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" ROCKSDB_GNU_CROSS_CACHE="${ROCKSDB_GNU_CROSS_CACHE}" rocksdbjavastaticpreparegnuccrossmusltoolchains
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" ROCKSDB_GNU_CROSS_CACHE="${ROCKSDB_GNU_CROSS_CACHE}" ROCKSDB_GNU_CROSS_MUSL_PREPARE_TRIPLES="x86-linux-musl" rocksdbjavastaticpreparegnuccrossmusltoolchains
       - uses: actions/upload-artifact@v6
         with:
-          name: rocksdbjni-gnu-musl-cross-toolchains
+          name: rocksdbjni-gnu-musl-cross-x86
+          if-no-files-found: error
+          path: /tmp/rocksdb-gnu-cross/toolchains
+
+  prepare-musl-x64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    env:
+      DEBUG_LEVEL: 0
+      J: "100%"
+      ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prepare GNU musl cross toolchain (x64)
+        run: |
+          set -euxo pipefail
+          mkdir -p "${ROCKSDB_GNU_CROSS_CACHE}"
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" ROCKSDB_GNU_CROSS_CACHE="${ROCKSDB_GNU_CROSS_CACHE}" ROCKSDB_GNU_CROSS_MUSL_PREPARE_TRIPLES="x86_64-linux-musl" rocksdbjavastaticpreparegnuccrossmusltoolchains
+      - uses: actions/upload-artifact@v6
+        with:
+          name: rocksdbjni-gnu-musl-cross-x64
+          if-no-files-found: error
+          path: /tmp/rocksdb-gnu-cross/toolchains
+
+  prepare-musl-ppc64le:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 240
+    env:
+      DEBUG_LEVEL: 0
+      J: "100%"
+      ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prepare GNU musl cross toolchain (ppc64le)
+        run: |
+          set -euxo pipefail
+          mkdir -p "${ROCKSDB_GNU_CROSS_CACHE}"
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" ROCKSDB_GNU_CROSS_CACHE="${ROCKSDB_GNU_CROSS_CACHE}" ROCKSDB_GNU_CROSS_MUSL_PREPARE_TRIPLES="powerpc64le-linux-musl" rocksdbjavastaticpreparegnuccrossmusltoolchains
+      - uses: actions/upload-artifact@v6
+        with:
+          name: rocksdbjni-gnu-musl-cross-ppc64le
+          if-no-files-found: error
+          path: /tmp/rocksdb-gnu-cross/toolchains
+
+  prepare-musl-s390x:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 240
+    env:
+      DEBUG_LEVEL: 0
+      J: "100%"
+      ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prepare GNU musl cross toolchain (s390x)
+        run: |
+          set -euxo pipefail
+          mkdir -p "${ROCKSDB_GNU_CROSS_CACHE}"
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" ROCKSDB_GNU_CROSS_CACHE="${ROCKSDB_GNU_CROSS_CACHE}" ROCKSDB_GNU_CROSS_MUSL_PREPARE_TRIPLES="s390x-linux-musl" rocksdbjavastaticpreparegnuccrossmusltoolchains
+      - uses: actions/upload-artifact@v6
+        with:
+          name: rocksdbjni-gnu-musl-cross-s390x
           if-no-files-found: error
           path: /tmp/rocksdb-gnu-cross/toolchains
 
@@ -36,7 +96,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 240
     needs:
-      - prepare-musl-cross-toolchains
+      - prepare-musl-x86
     env:
       DEBUG_LEVEL: 0
       J: "100%"
@@ -45,7 +105,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v7
         with:
-          name: rocksdbjni-gnu-musl-cross-toolchains
+          name: rocksdbjni-gnu-musl-cross-x86
           path: /tmp/rocksdb-gnu-cross/toolchains
       - name: Verify Release Mode
         run: |
@@ -73,7 +133,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 240
     needs:
-      - prepare-musl-cross-toolchains
+      - prepare-musl-x64
     env:
       DEBUG_LEVEL: 0
       J: "100%"
@@ -82,7 +142,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v7
         with:
-          name: rocksdbjni-gnu-musl-cross-toolchains
+          name: rocksdbjni-gnu-musl-cross-x64
           path: /tmp/rocksdb-gnu-cross/toolchains
       - name: Verify Release Mode
         run: |
@@ -140,7 +200,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 300
     needs:
-      - prepare-musl-cross-toolchains
+      - prepare-musl-ppc64le
     env:
       DEBUG_LEVEL: 0
       J: "100%"
@@ -149,7 +209,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v7
         with:
-          name: rocksdbjni-gnu-musl-cross-toolchains
+          name: rocksdbjni-gnu-musl-cross-ppc64le
           path: /tmp/rocksdb-gnu-cross/toolchains
       - name: Verify Release Mode
         run: |
@@ -203,7 +263,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 300
     needs:
-      - prepare-musl-cross-toolchains
+      - prepare-musl-s390x
     env:
       DEBUG_LEVEL: 0
       J: "100%"
@@ -212,7 +272,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v7
         with:
-          name: rocksdbjni-gnu-musl-cross-toolchains
+          name: rocksdbjni-gnu-musl-cross-s390x
           path: /tmp/rocksdb-gnu-cross/toolchains
       - name: Verify Release Mode
         run: |
