@@ -1,20 +1,5 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Codex <codex@openai.com>
-Date: Thu, 12 Mar 2026 00:00:00 -0700
-Subject: [PATCH] gcc: fix C++17 bool increment bootstrap failure
-
-Modern host compilers reject ++ on bool in C++17 mode. GCC 4.8.5 still
-contains one such use in reload1.c. The field is used as a boolean flag, so
-assigning true preserves the effective behavior while allowing the old
-compiler to bootstrap on modern hosts.
----
- gcc/reload1.c | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
-
-diff --git a/gcc/reload1.c b/gcc/reload1.c
-index b05f43f..561837e 100644
---- a/gcc/reload1.c
-+++ b/gcc/reload1.c
+--- gcc/reload1.c.orig
++++ gcc/reload1.c
 @@ -440,7 +440,7 @@ init_reload (void)
  
    while (memory_address_p (QImode, tem))
@@ -24,5 +9,3 @@ index b05f43f..561837e 100644
        tem = gen_rtx_MEM (Pmode, tem);
      }
  
--- 
-2.39.5

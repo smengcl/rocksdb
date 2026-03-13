@@ -2475,10 +2475,12 @@ rocksdbjavastaticwin64:
 
 rocksdbjavastaticfatjar: DEBUG_LEVEL=0
 rocksdbjavastaticfatjar: CMAKE_BUILD_TYPE=Release
+rocksdbjavastaticfatjar: DISABLE_JEMALLOC=1
 rocksdbjavastaticfatjar:
 	$(MAKE) $(ROCKSDB_JAVA_FATJAR_BUILD_TARGETS)
 	$(MAKE) rocksdbjavastaticfatjarassemble
 
+rocksdbjavastaticreleasedocker: DISABLE_JEMALLOC=1
 rocksdbjavastaticreleasedocker:
 	$(MAKE) rocksdbjavastaticfatjar
 

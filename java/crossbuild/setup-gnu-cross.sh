@@ -514,6 +514,22 @@ if old in text and "cross-compiling=yes" not in text:
     path.write_text(text.replace(old, new, 1))
 PY
   fi
+
+  if [ -f "${glibc_build_path}" ] && \
+     grep -Fq 'install-bootstrap-headers=yes' "${glibc_build_path}" && \
+     ! grep -Fq 'Pre-seed old glibc sunrpc headers' "${glibc_build_path}"; then
+    python3 - "${glibc_build_path}" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+old = """        CT_DoLog EXTRA "Installing C library headers"\n        CT_DoExecLog ALL touch "${multi_root}/.libc_headers_installed"\n\n        # use the 'install-headers' makefile target to install the\n"""
+new = """        CT_DoLog EXTRA "Installing C library headers"\n        CT_DoExecLog ALL touch "${multi_root}/.libc_headers_installed"\n\n        # Pre-seed old glibc sunrpc headers so rpcgen helper sources can\n        # include <rpc/types.h> during install-headers on modern hosts.\n        CT_DoExecLog ALL mkdir -p "${multi_root}/usr/include/rpc" "${multi_root}/usr/include/sunrpc/rpc"\n        CT_DoExecLog ALL cp -f "${src_dir}/sunrpc/rpc/types.h" "${multi_root}/usr/include/rpc/types.h"\n        CT_DoExecLog ALL cp -f "${src_dir}/sunrpc/rpc/types.h" "${multi_root}/usr/include/sunrpc/rpc/types.h"\n\n        # use the 'install-headers' makefile target to install the\n"""
+if old in text and "Pre-seed old glibc sunrpc headers" not in text:
+    path.write_text(text.replace(old, new, 1))
+PY
+  fi
 }
 
 rocksdb_ensure_ctng() {

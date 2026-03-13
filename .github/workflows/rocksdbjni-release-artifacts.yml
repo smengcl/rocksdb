@@ -92,7 +92,35 @@ jobs:
           if-no-files-found: error
           path: /tmp/rocksdb-gnu-cross/toolchains
 
-  build-linux-x86:
+  build-linux-x86-glibc:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 240
+    env:
+      DEBUG_LEVEL: 0
+      J: "100%"
+      ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
+      DISABLE_JEMALLOC: 1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify Release Mode
+        run: |
+          set -euxo pipefail
+          test "${DEBUG_LEVEL}" = "0"
+          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerx86 2>&1 | grep -q "Compiling in debug mode"
+      - name: Build Linux x86 glibc target
+        run: |
+          set -euxo pipefail
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86
+      - uses: actions/upload-artifact@v6
+        with:
+          name: rocksdbjni-linux-x86-glibc
+          if-no-files-found: error
+          path: |
+            java/target/librocksdbjni-linux32.so
+            java/target/rocksdbjni-*-linux32.jar
+            java/target/rocksdbjni-*-linux32.jar.sha1
+
+  build-linux-x86-musl:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 240
     needs:
@@ -101,6 +129,7 @@ jobs:
       DEBUG_LEVEL: 0
       J: "100%"
       ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
+      DISABLE_JEMALLOC: 1
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v7
@@ -111,25 +140,49 @@ jobs:
         run: |
           set -euxo pipefail
           test "${DEBUG_LEVEL}" = "0"
-          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerx86 2>&1 | grep -q "Compiling in debug mode"
-      - name: Build Linux x86 targets
+          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerx86musl 2>&1 | grep -q "Compiling in debug mode"
+      - name: Build Linux x86 musl target
         run: |
           set -euxo pipefail
-          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86musl
       - uses: actions/upload-artifact@v6
         with:
-          name: rocksdbjni-linux-x86
+          name: rocksdbjni-linux-x86-musl
           if-no-files-found: error
           path: |
-            java/target/librocksdbjni-linux32.so
             java/target/librocksdbjni-linux32-musl.so
-            java/target/rocksdbjni-*-linux32.jar
             java/target/rocksdbjni-*-linux32-musl.jar
-            java/target/rocksdbjni-*-linux32.jar.sha1
             java/target/rocksdbjni-*-linux32-musl.jar.sha1
 
-  build-linux-x64:
+  build-linux-x64-glibc:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 240
+    env:
+      DEBUG_LEVEL: 0
+      J: "100%"
+      ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
+      DISABLE_JEMALLOC: 1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify Release Mode
+        run: |
+          set -euxo pipefail
+          test "${DEBUG_LEVEL}" = "0"
+          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerx86_64 2>&1 | grep -q "Compiling in debug mode"
+      - name: Build Linux x64 glibc target
+        run: |
+          set -euxo pipefail
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86_64
+      - uses: actions/upload-artifact@v6
+        with:
+          name: rocksdbjni-linux-x64-glibc
+          if-no-files-found: error
+          path: |
+            java/target/librocksdbjni-linux64.so
+            java/target/rocksdbjni-*-linux64.jar
+            java/target/rocksdbjni-*-linux64.jar.sha1
+
+  build-linux-x64-musl:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 240
     needs:
@@ -138,6 +191,7 @@ jobs:
       DEBUG_LEVEL: 0
       J: "100%"
       ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
+      DISABLE_JEMALLOC: 1
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v7
@@ -148,30 +202,27 @@ jobs:
         run: |
           set -euxo pipefail
           test "${DEBUG_LEVEL}" = "0"
-          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerx86_64 2>&1 | grep -q "Compiling in debug mode"
-      - name: Build Linux x64 targets
+          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerx86_64musl 2>&1 | grep -q "Compiling in debug mode"
+      - name: Build Linux x64 musl target
         run: |
           set -euxo pipefail
-          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86_64
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerx86_64musl
       - uses: actions/upload-artifact@v6
         with:
-          name: rocksdbjni-linux-x64
+          name: rocksdbjni-linux-x64-musl
           if-no-files-found: error
           path: |
-            java/target/librocksdbjni-linux64.so
             java/target/librocksdbjni-linux64-musl.so
-            java/target/rocksdbjni-*-linux64.jar
             java/target/rocksdbjni-*-linux64-musl.jar
-            java/target/rocksdbjni-*-linux64.jar.sha1
             java/target/rocksdbjni-*-linux64-musl.jar.sha1
 
-  build-linux-aarch64:
+  build-linux-aarch64-glibc:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 240
     env:
       DEBUG_LEVEL: 0
       J: "100%"
+      DISABLE_JEMALLOC: 1
     steps:
       - uses: actions/checkout@v5
       - name: Verify Release Mode
@@ -179,24 +230,75 @@ jobs:
           set -euxo pipefail
           test "${DEBUG_LEVEL}" = "0"
           ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerarm64v8 2>&1 | grep -q "Compiling in debug mode"
-      - name: Build Linux aarch64 targets
+      - name: Build Linux aarch64 glibc target
         run: |
           set -euxo pipefail
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerarm64v8
-          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerarm64v8musl
       - uses: actions/upload-artifact@v6
         with:
-          name: rocksdbjni-linux-aarch64
+          name: rocksdbjni-linux-aarch64-glibc
           if-no-files-found: error
           path: |
             java/target/librocksdbjni-linux-aarch64.so
-            java/target/librocksdbjni-linux-aarch64-musl.so
             java/target/rocksdbjni-*-linux-aarch64.jar
-            java/target/rocksdbjni-*-linux-aarch64-musl.jar
             java/target/rocksdbjni-*-linux-aarch64.jar.sha1
+
+  build-linux-aarch64-musl:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 240
+    env:
+      DEBUG_LEVEL: 0
+      J: "100%"
+      DISABLE_JEMALLOC: 1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify Release Mode
+        run: |
+          set -euxo pipefail
+          test "${DEBUG_LEVEL}" = "0"
+          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerarm64v8musl 2>&1 | grep -q "Compiling in debug mode"
+      - name: Build Linux aarch64 musl target
+        run: |
+          set -euxo pipefail
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerarm64v8musl
+      - uses: actions/upload-artifact@v6
+        with:
+          name: rocksdbjni-linux-aarch64-musl
+          if-no-files-found: error
+          path: |
+            java/target/librocksdbjni-linux-aarch64-musl.so
+            java/target/rocksdbjni-*-linux-aarch64-musl.jar
             java/target/rocksdbjni-*-linux-aarch64-musl.jar.sha1
 
-  build-linux-ppc64le:
+  build-linux-ppc64le-glibc:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 300
+    env:
+      DEBUG_LEVEL: 0
+      J: "100%"
+      ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
+      DISABLE_JEMALLOC: 1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify Release Mode
+        run: |
+          set -euxo pipefail
+          test "${DEBUG_LEVEL}" = "0"
+          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerppc64le 2>&1 | grep -q "Compiling in debug mode"
+      - name: Build Linux ppc64le glibc target
+        run: |
+          set -euxo pipefail
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerppc64le
+      - uses: actions/upload-artifact@v6
+        with:
+          name: rocksdbjni-linux-ppc64le-glibc
+          if-no-files-found: error
+          path: |
+            java/target/librocksdbjni-linux-ppc64le.so
+            java/target/rocksdbjni-*-linux-ppc64le.jar
+            java/target/rocksdbjni-*-linux-ppc64le.jar.sha1
+
+  build-linux-ppc64le-musl:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 300
     needs:
@@ -205,6 +307,7 @@ jobs:
       DEBUG_LEVEL: 0
       J: "100%"
       ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
+      DISABLE_JEMALLOC: 1
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v7
@@ -215,22 +318,18 @@ jobs:
         run: |
           set -euxo pipefail
           test "${DEBUG_LEVEL}" = "0"
-          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerppc64le 2>&1 | grep -q "Compiling in debug mode"
-      - name: Build Linux ppc64le targets
+          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerppc64lemusl 2>&1 | grep -q "Compiling in debug mode"
+      - name: Build Linux ppc64le musl target
         run: |
           set -euxo pipefail
-          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerppc64le
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerppc64lemusl
       - uses: actions/upload-artifact@v6
         with:
-          name: rocksdbjni-linux-ppc64le
+          name: rocksdbjni-linux-ppc64le-musl
           if-no-files-found: error
           path: |
-            java/target/librocksdbjni-linux-ppc64le.so
             java/target/librocksdbjni-linux-ppc64le-musl.so
-            java/target/rocksdbjni-*-linux-ppc64le.jar
             java/target/rocksdbjni-*-linux-ppc64le-musl.jar
-            java/target/rocksdbjni-*-linux-ppc64le.jar.sha1
             java/target/rocksdbjni-*-linux-ppc64le-musl.jar.sha1
 
   build-linux-riscv64:
@@ -239,6 +338,7 @@ jobs:
     env:
       DEBUG_LEVEL: 0
       J: "100%"
+      DISABLE_JEMALLOC: 1
     steps:
       - uses: actions/checkout@v5
       - name: Verify Release Mode
@@ -246,7 +346,7 @@ jobs:
           set -euxo pipefail
           test "${DEBUG_LEVEL}" = "0"
           ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerriscv64 2>&1 | grep -q "Compiling in debug mode"
-      - name: Build Linux riscv64 targets
+      - name: Build Linux riscv64 target
         run: |
           set -euxo pipefail
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockerriscv64
@@ -259,7 +359,35 @@ jobs:
             java/target/rocksdbjni-*-linux-riscv64.jar
             java/target/rocksdbjni-*-linux-riscv64.jar.sha1
 
-  build-linux-s390x:
+  build-linux-s390x-glibc:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 300
+    env:
+      DEBUG_LEVEL: 0
+      J: "100%"
+      ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
+      DISABLE_JEMALLOC: 1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify Release Mode
+        run: |
+          set -euxo pipefail
+          test "${DEBUG_LEVEL}" = "0"
+          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockers390x 2>&1 | grep -q "Compiling in debug mode"
+      - name: Build Linux s390x glibc target
+        run: |
+          set -euxo pipefail
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockers390x
+      - uses: actions/upload-artifact@v6
+        with:
+          name: rocksdbjni-linux-s390x-glibc
+          if-no-files-found: error
+          path: |
+            java/target/librocksdbjni-linux-s390x.so
+            java/target/rocksdbjni-*-linux-s390x.jar
+            java/target/rocksdbjni-*-linux-s390x.jar.sha1
+
+  build-linux-s390x-musl:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 300
     needs:
@@ -268,6 +396,7 @@ jobs:
       DEBUG_LEVEL: 0
       J: "100%"
       ROCKSDB_GNU_CROSS_CACHE: /tmp/rocksdb-gnu-cross
+      DISABLE_JEMALLOC: 1
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v7
@@ -278,22 +407,18 @@ jobs:
         run: |
           set -euxo pipefail
           test "${DEBUG_LEVEL}" = "0"
-          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockers390x 2>&1 | grep -q "Compiling in debug mode"
-      - name: Build Linux s390x targets
+          ! make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockers390xmusl 2>&1 | grep -q "Compiling in debug mode"
+      - name: Build Linux s390x musl target
         run: |
           set -euxo pipefail
-          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockers390x
           make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticdockers390xmusl
       - uses: actions/upload-artifact@v6
         with:
-          name: rocksdbjni-linux-s390x
+          name: rocksdbjni-linux-s390x-musl
           if-no-files-found: error
           path: |
-            java/target/librocksdbjni-linux-s390x.so
             java/target/librocksdbjni-linux-s390x-musl.so
-            java/target/rocksdbjni-*-linux-s390x.jar
             java/target/rocksdbjni-*-linux-s390x-musl.jar
-            java/target/rocksdbjni-*-linux-s390x.jar.sha1
             java/target/rocksdbjni-*-linux-s390x-musl.jar.sha1
 
   build-osx:
@@ -371,12 +496,17 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     needs:
-      - build-linux-x86
-      - build-linux-x64
-      - build-linux-aarch64
-      - build-linux-ppc64le
+      - build-linux-x86-glibc
+      - build-linux-x86-musl
+      - build-linux-x64-glibc
+      - build-linux-x64-musl
+      - build-linux-aarch64-glibc
+      - build-linux-aarch64-musl
+      - build-linux-ppc64le-glibc
+      - build-linux-ppc64le-musl
       - build-linux-riscv64
-      - build-linux-s390x
+      - build-linux-s390x-glibc
+      - build-linux-s390x-musl
       - build-osx
       - build-win64
     steps:
@@ -387,28 +517,48 @@ jobs:
           java-version: "8"
       - uses: actions/download-artifact@v7
         with:
-          name: rocksdbjni-linux-x86
-          path: artifacts/linux-x86
+          name: rocksdbjni-linux-x86-glibc
+          path: artifacts/linux-x86-glibc
       - uses: actions/download-artifact@v7
         with:
-          name: rocksdbjni-linux-x64
-          path: artifacts/linux-x64
+          name: rocksdbjni-linux-x86-musl
+          path: artifacts/linux-x86-musl
       - uses: actions/download-artifact@v7
         with:
-          name: rocksdbjni-linux-aarch64
-          path: artifacts/linux-aarch64
+          name: rocksdbjni-linux-x64-glibc
+          path: artifacts/linux-x64-glibc
       - uses: actions/download-artifact@v7
         with:
-          name: rocksdbjni-linux-ppc64le
-          path: artifacts/linux-ppc64le
+          name: rocksdbjni-linux-x64-musl
+          path: artifacts/linux-x64-musl
+      - uses: actions/download-artifact@v7
+        with:
+          name: rocksdbjni-linux-aarch64-glibc
+          path: artifacts/linux-aarch64-glibc
+      - uses: actions/download-artifact@v7
+        with:
+          name: rocksdbjni-linux-aarch64-musl
+          path: artifacts/linux-aarch64-musl
+      - uses: actions/download-artifact@v7
+        with:
+          name: rocksdbjni-linux-ppc64le-glibc
+          path: artifacts/linux-ppc64le-glibc
+      - uses: actions/download-artifact@v7
+        with:
+          name: rocksdbjni-linux-ppc64le-musl
+          path: artifacts/linux-ppc64le-musl
       - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-linux-riscv64
           path: artifacts/linux-riscv64
       - uses: actions/download-artifact@v7
         with:
-          name: rocksdbjni-linux-s390x
-          path: artifacts/linux-s390x
+          name: rocksdbjni-linux-s390x-glibc
+          path: artifacts/linux-s390x-glibc
+      - uses: actions/download-artifact@v7
+        with:
+          name: rocksdbjni-linux-s390x-musl
+          path: artifacts/linux-s390x-musl
       - uses: actions/download-artifact@v7
         with:
           name: rocksdbjni-osx
@@ -442,6 +592,17 @@ jobs:
                ! readelf -d "${native}" | grep -Eq 'libstdc\+\+\.so\.6' && \
                ! strings "${native}" | grep -Eq 'libstdc\+\+\.so\.6'; then
               echo "Could not confirm GNU libstdc++ ABI in ${native}"
+              exit 1
+            fi
+          }
+
+          validate_static_dependency_shape() {
+            local native="$1"
+            local forbidden_pattern='libjemalloc|libsnappy|libbz2|liblz4|libzstd'
+
+            if objdump -p "${native}" | grep -Eqi "${forbidden_pattern}"; then
+              echo "Unexpected dynamic runtime dependency in ${native}"
+              objdump -p "${native}" | grep -Ei "${forbidden_pattern}|NEEDED|INTERP" || true
               exit 1
             fi
           }
@@ -544,16 +705,16 @@ jobs:
           }
 
           mkdir -p java/target output
-          cp "$(find_one artifacts/linux-x86 'librocksdbjni-linux32.so')" java/target/
-          cp "$(find_one artifacts/linux-x64 'librocksdbjni-linux64.so')" java/target/
-          cp "$(find_one artifacts/linux-x86 'librocksdbjni-linux32-musl.so')" java/target/
-          cp "$(find_one artifacts/linux-x64 'librocksdbjni-linux64-musl.so')" java/target/
-          cp "$(find_one artifacts/linux-aarch64 'librocksdbjni-linux-aarch64.so')" java/target/
-          cp "$(find_one artifacts/linux-aarch64 'librocksdbjni-linux-aarch64-musl.so')" java/target/
-          cp "$(find_one artifacts/linux-ppc64le 'librocksdbjni-linux-ppc64le.so')" java/target/
-          cp "$(find_one artifacts/linux-ppc64le 'librocksdbjni-linux-ppc64le-musl.so')" java/target/
-          cp "$(find_one artifacts/linux-s390x 'librocksdbjni-linux-s390x.so')" java/target/
-          cp "$(find_one artifacts/linux-s390x 'librocksdbjni-linux-s390x-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-x86-glibc 'librocksdbjni-linux32.so')" java/target/
+          cp "$(find_one artifacts/linux-x64-glibc 'librocksdbjni-linux64.so')" java/target/
+          cp "$(find_one artifacts/linux-x86-musl 'librocksdbjni-linux32-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-x64-musl 'librocksdbjni-linux64-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-aarch64-glibc 'librocksdbjni-linux-aarch64.so')" java/target/
+          cp "$(find_one artifacts/linux-aarch64-musl 'librocksdbjni-linux-aarch64-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-ppc64le-glibc 'librocksdbjni-linux-ppc64le.so')" java/target/
+          cp "$(find_one artifacts/linux-ppc64le-musl 'librocksdbjni-linux-ppc64le-musl.so')" java/target/
+          cp "$(find_one artifacts/linux-s390x-glibc 'librocksdbjni-linux-s390x.so')" java/target/
+          cp "$(find_one artifacts/linux-s390x-musl 'librocksdbjni-linux-s390x-musl.so')" java/target/
           cp "$(find_one artifacts/linux-riscv64 'librocksdbjni-linux-riscv64.so')" java/target/
           cp "$(find_one artifacts/osx 'librocksdbjni-osx-arm64.jnilib')" java/target/
           cp "$(find_one artifacts/osx 'librocksdbjni-osx-x86_64.jnilib')" java/target/
@@ -562,6 +723,7 @@ jobs:
           for native in java/target/librocksdbjni-linux*.so; do
             ! nm -D "${native}" | grep -Eq '__ubsan_|__asan_|__tsan_'
             validate_gnu_cxx_abi "${native}"
+            validate_static_dependency_shape "${native}"
             validate_official_linux_abi_floor "${native}"
             validate_musl_loader_and_deps "${native}"
           done
@@ -595,14 +757,14 @@ jobs:
           cp "java/target/rocksdbjni-${VERSION}-sources.jar" output/
           cp "java/target/rocksdbjni-${VERSION}-sources.jar.sha1" output/
 
-          cp "$(find_one artifacts/linux-x86 'rocksdbjni-*-linux32.jar')" output/
-          cp "$(find_one artifacts/linux-x64 'rocksdbjni-*-linux64.jar')" output/
-          cp "$(find_one artifacts/linux-x86 'rocksdbjni-*-linux32-musl.jar')" output/
-          cp "$(find_one artifacts/linux-x64 'rocksdbjni-*-linux64-musl.jar')" output/
-          cp "$(find_one artifacts/linux-x86 'rocksdbjni-*-linux32.jar.sha1')" output/
-          cp "$(find_one artifacts/linux-x64 'rocksdbjni-*-linux64.jar.sha1')" output/
-          cp "$(find_one artifacts/linux-x86 'rocksdbjni-*-linux32-musl.jar.sha1')" output/
-          cp "$(find_one artifacts/linux-x64 'rocksdbjni-*-linux64-musl.jar.sha1')" output/
+          cp "$(find_one artifacts/linux-x86-glibc 'rocksdbjni-*-linux32.jar')" output/
+          cp "$(find_one artifacts/linux-x64-glibc 'rocksdbjni-*-linux64.jar')" output/
+          cp "$(find_one artifacts/linux-x86-musl 'rocksdbjni-*-linux32-musl.jar')" output/
+          cp "$(find_one artifacts/linux-x64-musl 'rocksdbjni-*-linux64-musl.jar')" output/
+          cp "$(find_one artifacts/linux-x86-glibc 'rocksdbjni-*-linux32.jar.sha1')" output/
+          cp "$(find_one artifacts/linux-x64-glibc 'rocksdbjni-*-linux64.jar.sha1')" output/
+          cp "$(find_one artifacts/linux-x86-musl 'rocksdbjni-*-linux32-musl.jar.sha1')" output/
+          cp "$(find_one artifacts/linux-x64-musl 'rocksdbjni-*-linux64-musl.jar.sha1')" output/
           cp "$(find_one artifacts/osx 'rocksdbjni-*-osx.jar')" output/
           cp "$(find_one artifacts/osx 'rocksdbjni-*-osx.jar.sha1')" output/
           cp "$(find_one artifacts/win64 'rocksdbjni-*-win64.jar')" output/

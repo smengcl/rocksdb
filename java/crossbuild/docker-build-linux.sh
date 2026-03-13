@@ -29,6 +29,7 @@ fi
 
 # Build defaults for release jars
 export PORTABLE=1
+export DISABLE_JEMALLOC="${DISABLE_JEMALLOC:-1}"
 
 # Release artifact builds must never pick up sanitizer instrumentation.
 unset COMPILE_WITH_ASAN COMPILE_WITH_TSAN COMPILE_WITH_UBSAN
@@ -144,6 +145,27 @@ validate_gnu_cxx_abi() {
 
   if [ "${has_gnu_abi}" -eq 0 ]; then
     echo "Could not confirm GNU libstdc++ ABI in ${native_path}"
+    exit 1
+  fi
+}
+
+validate_static_dependency_shape() {
+  local native_path="$1"
+  local dynamic_dump=""
+  local forbidden_pattern='libjemalloc|libsnappy|libbz2|liblz4|libzstd'
+
+  if hash objdump 2>/dev/null; then
+    dynamic_dump="$(objdump -p "${native_path}" 2>/dev/null || true)"
+  elif hash readelf 2>/dev/null; then
+    dynamic_dump="$(readelf -d "${native_path}" 2>/dev/null || true)"
+  else
+    echo "Neither objdump nor readelf is available to validate runtime deps in ${native_path}"
+    exit 1
+  fi
+
+  if printf '%s\n' "${dynamic_dump}" | grep -Eqi "${forbidden_pattern}"; then
+    echo "Unexpected dynamic runtime dependency in ${native_path}"
+    printf '%s\n' "${dynamic_dump}" | grep -Ei "${forbidden_pattern}|NEEDED|INTERP" || true
     exit 1
   fi
 }
@@ -399,6 +421,7 @@ for native_artifact in "${native_artifacts[@]}"; do
   validate_native_artifact "${native_artifact}"
   validate_no_sanitizer_refs "${native_artifact}"
   validate_gnu_cxx_abi "${native_artifact}"
+  validate_static_dependency_shape "${native_artifact}"
   validate_official_linux_abi_floor "${native_artifact}"
   validate_musl_loader_and_deps "${native_artifact}"
 done
