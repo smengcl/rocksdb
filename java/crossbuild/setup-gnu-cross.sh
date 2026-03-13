@@ -17,9 +17,8 @@ ROCKSDB_GNU_CROSS_BINUTILS_VERSION_MODERN="${ROCKSDB_GNU_CROSS_BINUTILS_VERSION_
 ROCKSDB_GNU_CROSS_GCC_VERSION="${ROCKSDB_GNU_CROSS_GCC_VERSION:-11.4.0}"
 ROCKSDB_GNU_CROSS_GLIBC_VERSION="${ROCKSDB_GNU_CROSS_GLIBC_VERSION:-2.17}"
 ROCKSDB_GNU_CROSS_MUSL_VERSION="${ROCKSDB_GNU_CROSS_MUSL_VERSION:-1.2.4}"
-ROCKSDB_GNU_CROSS_LAYOUT_VERSION="${ROCKSDB_GNU_CROSS_LAYOUT_VERSION:-6}"
+ROCKSDB_GNU_CROSS_LAYOUT_VERSION="${ROCKSDB_GNU_CROSS_LAYOUT_VERSION:-9}"
 ROCKSDB_GNU_CROSS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROCKSDB_GNU_CROSS_PATCHES_DIR="${ROCKSDB_GNU_CROSS_SCRIPT_DIR}/patches/ctng"
 
 ROCKSDB_GNU_CROSS_TOOLCHAINS_DIR="${ROCKSDB_GNU_CROSS_CACHE}/toolchains"
 ROCKSDB_GNU_CROSS_SOURCES_DIR="${ROCKSDB_GNU_CROSS_CACHE}/sources"
@@ -106,6 +105,18 @@ rocksdb_set_kconfig_value() {
     sed -i "s|^${symbol}=.*|${symbol}=\"${escaped_value}\"|" "${config_path}"
   else
     printf '%s="%s"\n' "${symbol}" "${value}" >> "${config_path}"
+  fi
+}
+
+rocksdb_set_kconfig_int() {
+  local config_path="$1"
+  local symbol="$2"
+  local value="$3"
+
+  if grep -Eq "^${symbol}=" "${config_path}"; then
+    sed -i "s|^${symbol}=.*|${symbol}=${value}|" "${config_path}"
+  else
+    printf '%s=%s\n' "${symbol}" "${value}" >> "${config_path}"
   fi
 }
 
@@ -207,6 +218,10 @@ rocksdb_map_cross_target() {
 GNU_APT_PACKAGES=()
 GNU_TOOL_PREFIX=
 GNU_TOOLCHAIN_KIND=
+GNU_USE_OLD_HOST_COMPILER=n
+GNU_HOST_CC=
+GNU_HOST_CXX=
+GNU_HOST_PATH_PREFIX=
 GNU_CTNG_SAMPLE=
 GNU_CTNG_BIN=
 GNU_CTNG_VERSION=
@@ -230,6 +245,7 @@ GNU_CTNG_URL=
       GNU_CTNG_BINUTILS_VERSION="${ROCKSDB_GNU_CROSS_BINUTILS_VERSION_OLD}"
       GNU_CTNG_GCC_VERSION=4.8.5
       GNU_CTNG_GLIBC_VERSION=2.16.0
+      GNU_USE_OLD_HOST_COMPILER=y
       ;;
     x86-linux-musl)
       CROSS_SYSTEM_PROCESSOR=x86
@@ -256,6 +272,7 @@ GNU_CTNG_URL=
       GNU_CTNG_BINUTILS_VERSION="${ROCKSDB_GNU_CROSS_BINUTILS_VERSION_OLD}"
       GNU_CTNG_GCC_VERSION=4.8.5
       GNU_CTNG_GLIBC_VERSION=2.16.0
+      GNU_USE_OLD_HOST_COMPILER=y
       ;;
     x86_64-linux-musl)
       CROSS_SYSTEM_PROCESSOR=x86_64
@@ -282,6 +299,7 @@ GNU_CTNG_URL=
       GNU_CTNG_BINUTILS_VERSION="${ROCKSDB_GNU_CROSS_BINUTILS_VERSION_OLD}"
       GNU_CTNG_GCC_VERSION=4.8.5
       GNU_CTNG_GLIBC_VERSION=2.17
+      GNU_USE_OLD_HOST_COMPILER=y
       ;;
     powerpc64le-linux-musl)
       CROSS_SYSTEM_PROCESSOR=ppc64le
@@ -308,6 +326,7 @@ GNU_CTNG_URL=
       GNU_CTNG_BINUTILS_VERSION="${ROCKSDB_GNU_CROSS_BINUTILS_VERSION_OLD}"
       GNU_CTNG_GCC_VERSION=6.5.0
       GNU_CTNG_GLIBC_VERSION=2.12.2
+      GNU_USE_OLD_HOST_COMPILER=y
       ;;
     s390x-linux-musl)
       CROSS_SYSTEM_PROCESSOR=s390x
@@ -340,6 +359,11 @@ GNU_CTNG_URL=
       exit 1
       ;;
   esac
+
+  if [ "${GNU_USE_OLD_HOST_COMPILER}" = "y" ]; then
+    GNU_HOST_CC=gcc-10
+    GNU_HOST_CXX=g++-10
+  fi
 }
 
 rocksdb_write_ctng_overrides() {
@@ -359,12 +383,6 @@ rocksdb_write_ctng_overrides() {
   rocksdb_set_kconfig_value "${config_path}" CT_LOCAL_TARBALLS_DIR "${ROCKSDB_GNU_CROSS_SOURCES_DIR}"
   rocksdb_set_kconfig_value "${config_path}" CT_PREFIX_DIR "${toolchain_root}"
   rocksdb_set_kconfig_bool "${config_path}" CT_SAVE_TARBALLS y
-  if [ "${GNU_CTNG_VERSION}" = "1.24.0" ]; then
-    rocksdb_set_kconfig_bool "${config_path}" CT_PATCH_BUNDLED n
-    rocksdb_set_kconfig_bool "${config_path}" CT_PATCH_BUNDLED_LOCAL y
-    rocksdb_set_kconfig_value "${config_path}" CT_PATCH_ORDER "bundled,local"
-    rocksdb_set_kconfig_value "${config_path}" CT_LOCAL_PATCH_DIR "${ROCKSDB_GNU_CROSS_PATCHES_DIR}"
-  fi
   if [ "${GNU_TOOLCHAIN_KIND}" = "glibc" ]; then
     rocksdb_set_ctng_version_choice "${config_path}" CT_GLIBC "${GNU_CTNG_GLIBC_VERSION}" "${GNU_CTNG_VERSION}"
     rocksdb_set_kconfig_bool "${config_path}" CT_LIBC_GLIBC y
@@ -390,12 +408,42 @@ rocksdb_write_ctng_overrides() {
   rocksdb_set_kconfig_bool "${config_path}" CT_BINUTILS_PLUGINS n
   rocksdb_set_kconfig_bool "${config_path}" CT_CC_GCC_ENABLE_PLUGINS n
   rocksdb_set_kconfig_bool "${config_path}" CT_CC_GCC_USE_LTO n
+  if [ "${GNU_USE_OLD_HOST_COMPILER}" = "y" ]; then
+    # Old-floor glibc toolchains with GCC 4.8.5 are memory-heavy on arm64
+    # runners; cap ct-ng parallelism to avoid OOM kills.
+    rocksdb_set_kconfig_int "${config_path}" CT_PARALLEL_JOBS 2
+    rocksdb_set_kconfig_value "${config_path}" CT_LOAD ""
+  fi
 
 }
 
 rocksdb_select_ctng_runtime() {
   GNU_CTNG_ROOT="${ROCKSDB_GNU_CROSS_CACHE}/ctng/${GNU_CTNG_VERSION}"
   GNU_CTNG_URL="https://github.com/crosstool-ng/crosstool-ng/archive/refs/tags/crosstool-ng-${GNU_CTNG_VERSION}.tar.gz"
+}
+
+rocksdb_ctng_command() {
+  if [ -n "${GNU_HOST_PATH_PREFIX}" ]; then
+    env PATH="${GNU_HOST_PATH_PREFIX}:${PATH}" "$@"
+  else
+    "$@"
+  fi
+}
+
+rocksdb_prepare_old_host_compiler_path() {
+  local host_tools_dir
+
+  if [ -z "${GNU_HOST_CC}" ] || [ -z "${GNU_HOST_CXX}" ]; then
+    return 0
+  fi
+
+  host_tools_dir="${ROCKSDB_GNU_CROSS_TMP_DIR}/host-tools"
+  mkdir -p "${host_tools_dir}"
+  ln -sfn "$(command -v "${GNU_HOST_CC}")" "${host_tools_dir}/gcc"
+  ln -sfn "$(command -v "${GNU_HOST_CXX}")" "${host_tools_dir}/g++"
+  ln -sfn "$(command -v "${GNU_HOST_CC}")" "${host_tools_dir}/cc"
+  ln -sfn "$(command -v "${GNU_HOST_CXX}")" "${host_tools_dir}/c++"
+  GNU_HOST_PATH_PREFIX="${host_tools_dir}"
 }
 
 rocksdb_validate_ctng_toolchain() {
@@ -516,6 +564,34 @@ PY
   fi
 
   if [ -f "${glibc_build_path}" ] && \
+     grep -Fq 'cross-compiling=yes' "${glibc_build_path}" && \
+     ! grep -Fq 'Serialise old glibc sunrpc header install' "${glibc_build_path}"; then
+    python3 - "${glibc_build_path}" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+pattern = re.compile(
+    r'''(?P<indent>\s*)# use the 'install-headers' makefile target to install the\n'''
+    r'''(?P=indent)# headers\n'''
+    r'''(?P=indent)CT_DoExecLog ALL make \${CT_JOBSFLAGS}\s+\\\\\n'''
+    r'''(?P=indent)\s*install_root=\${multi_root}\s+\\\\\n'''
+    r'''(?P=indent)\s*install-bootstrap-headers=yes\s+\\\\\n'''
+    r'''(?P=indent)\s*cross-compiling=yes\s+\\\\\n'''
+    r'''(?P=indent)\s*"\${extra_make_args\[@\]}"\s+\\\\\n'''
+    r'''(?P=indent)\s*install-headers\n''',
+    re.MULTILINE,
+)
+replacement = """        # use the 'install-headers' makefile target to install the\n        # headers\n        if [ -d \"${src_dir}/sunrpc\" ]; then\n            # Serialise old glibc sunrpc header install to avoid rpcgen races.\n            CT_DoExecLog ALL make -j1                                \\\n                             install_root=${multi_root}             \\\n                             install-bootstrap-headers=yes          \\\n                             cross-compiling=yes                    \\\n                             \"${extra_make_args[@]}\"                \\\n                             install-headers\n        else\n            CT_DoExecLog ALL make ${CT_JOBSFLAGS}                   \\\n                             install_root=${multi_root}             \\\n                             install-bootstrap-headers=yes          \\\n                             cross-compiling=yes                    \\\n                             \"${extra_make_args[@]}\"                \\\n                             install-headers\n        fi\n"""
+text2, count = pattern.subn(replacement, text, count=1)
+if count and "Serialise old glibc sunrpc header install" not in text:
+    path.write_text(text2)
+PY
+  fi
+
+  if [ -f "${glibc_build_path}" ] && \
      grep -Fq 'install-bootstrap-headers=yes' "${glibc_build_path}" && \
      ! grep -Fq 'Pre-seed old glibc sunrpc headers' "${glibc_build_path}"; then
     python3 - "${glibc_build_path}" <<'PY'
@@ -527,6 +603,20 @@ text = path.read_text()
 old = """        CT_DoLog EXTRA "Installing C library headers"\n        CT_DoExecLog ALL touch "${multi_root}/.libc_headers_installed"\n\n        # use the 'install-headers' makefile target to install the\n"""
 new = """        CT_DoLog EXTRA "Installing C library headers"\n        CT_DoExecLog ALL touch "${multi_root}/.libc_headers_installed"\n\n        # Pre-seed old glibc sunrpc headers so rpcgen helper sources can\n        # include <rpc/types.h> during install-headers on modern hosts.\n        CT_DoExecLog ALL mkdir -p "${multi_root}/usr/include/rpc" "${multi_root}/usr/include/sunrpc/rpc"\n        CT_DoExecLog ALL cp -f "${src_dir}/sunrpc/rpc/types.h" "${multi_root}/usr/include/rpc/types.h"\n        CT_DoExecLog ALL cp -f "${src_dir}/sunrpc/rpc/types.h" "${multi_root}/usr/include/sunrpc/rpc/types.h"\n\n        # use the 'install-headers' makefile target to install the\n"""
 if old in text and "Pre-seed old glibc sunrpc headers" not in text:
+    path.write_text(text.replace(old, new, 1))
+PY
+  fi
+
+  if [ -f "${glibc_build_path}" ]; then
+    python3 - "${glibc_build_path}" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+old = """    if [ -d "${src_dir}/sunrpc" ]; then\n        # Add sysroot include paths for old glibc sunrpc helpers.\n        build_cppflags="${build_cppflags} -I${multi_root}/usr/include -I${multi_root}/usr/include/sunrpc"\n    fi\n\n    extra_make_args+=( "BUILD_CFLAGS=${build_cflags}" )\n    extra_make_args+=( "BUILD_CPPFLAGS=${build_cppflags}" )\n"""
+new = """    extra_make_args+=( "BUILD_CFLAGS=${build_cflags}" )\n    extra_make_args+=( "BUILD_CPPFLAGS=${build_cppflags}" )\n"""
+if old in text:
     path.write_text(text.replace(old, new, 1))
 PY
   fi
@@ -559,10 +649,10 @@ rocksdb_ensure_ctng() {
   tar -C "${ROCKSDB_GNU_CROSS_TMP_DIR}" -xzf "${ctng_src_tar}"
 
   pushd "${ctng_src_dir}" >/dev/null
-  ./bootstrap
-  ./configure --prefix="${GNU_CTNG_ROOT}"
-  make -j"$(nproc)"
-  make install
+  rocksdb_ctng_command ./bootstrap
+  rocksdb_ctng_command ./configure --prefix="${GNU_CTNG_ROOT}"
+  rocksdb_ctng_command make -j"$(nproc)"
+  rocksdb_ctng_command make install
   popd >/dev/null
 
   rocksdb_patch_ctng_install
@@ -616,10 +706,10 @@ rocksdb_ensure_ctng_toolchain() {
     mkdir -p "${build_root}" "${local_toolchain_root}"
 
     pushd "${build_root}" >/dev/null
-    "${ctng_bin}" "${GNU_CTNG_SAMPLE}"
+    rocksdb_ctng_command "${ctng_bin}" "${GNU_CTNG_SAMPLE}"
     rocksdb_write_ctng_overrides .config "${local_toolchain_root}"
-    "${ctng_bin}" olddefconfig
-    "${ctng_bin}" build
+    rocksdb_ctng_command "${ctng_bin}" olddefconfig
+    rocksdb_ctng_command "${ctng_bin}" build
     ct_target=
     for gcc_path in "${local_toolchain_root}"/bin/*-gcc; do
       [ -e "${gcc_path}" ] || continue
@@ -682,10 +772,15 @@ rocksdb_setup_gnu_cross_toolchain() {
   rocksdb_select_ctng_runtime
   rocksdb_prefetch_legacy_ctng_tarballs
 
-  rocksdb_install_apt_packages "${ROCKSDB_GNU_COMMON_PACKAGES[@]}"
+  if [ "${GNU_USE_OLD_HOST_COMPILER}" = "y" ]; then
+    rocksdb_install_apt_packages "${ROCKSDB_GNU_COMMON_PACKAGES[@]}" gcc-10 g++-10
+  else
+    rocksdb_install_apt_packages "${ROCKSDB_GNU_COMMON_PACKAGES[@]}"
+  fi
   if [ "${GNU_TOOLCHAIN_KIND}" = "musl" ] && hash bsdtar 2>/dev/null; then
     export CT_TAR=bsdtar
   fi
+  rocksdb_prepare_old_host_compiler_path
   rocksdb_ensure_ctng_toolchain
   toolchain_bin="${GNU_TOOLCHAIN_ROOT}/bin"
 
