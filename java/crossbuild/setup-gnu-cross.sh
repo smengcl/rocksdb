@@ -56,6 +56,7 @@ ROCKSDB_GNU_COMMON_PACKAGES=(
   libtool-bin
   make
   patch
+  patchelf
   pkg-config
   python3
   rsync
@@ -196,6 +197,9 @@ rocksdb_set_ctng_version_choice() {
       ;;
     1.26.0:CT_GLIBC:2.29)
       symbol=CT_GLIBC_V_2_29
+      ;;
+    1.26.0:CT_GLIBC:2.30)
+      symbol=CT_GLIBC_V_2_30
       ;;
     1.26.0:CT_MUSL:1.2.4)
       symbol=CT_MUSL_V_1_2_4
@@ -352,7 +356,7 @@ GNU_CTNG_URL=
       GNU_CTNG_VERSION="${ROCKSDB_GNU_CROSS_CTNG_VERSION_GLIBC_RISCV64}"
       GNU_CTNG_BINUTILS_VERSION="${ROCKSDB_GNU_CROSS_BINUTILS_VERSION_MODERN}"
       GNU_CTNG_GCC_VERSION=8.2.0
-      GNU_CTNG_GLIBC_VERSION=2.29
+      GNU_CTNG_GLIBC_VERSION=2.30
       ;;
     *)
       echo "Unsupported ROCKSDB_CROSS_TRIPLE: ${ROCKSDB_CROSS_TRIPLE}"
@@ -524,6 +528,13 @@ rocksdb_prefetch_legacy_ctng_tarballs() {
       "https://libisl.sourceforge.io/isl-0.12.2.tar.bz2" \
       "https://gcc.gnu.org/pub/gcc/infrastructure/isl-0.12.2.tar.bz2"
   fi
+
+  if [ ! -f "${ROCKSDB_GNU_CROSS_SOURCES_DIR}/isl-0.20.tar.xz" ]; then
+    rocksdb_fetch_with_fallbacks \
+      "${ROCKSDB_GNU_CROSS_SOURCES_DIR}/isl-0.20.tar.xz" \
+      "https://libisl.sourceforge.io/isl-0.20.tar.xz" \
+      "https://gcc.gnu.org/pub/gcc/infrastructure/isl-0.20.tar.xz"
+  fi
 }
 
 rocksdb_make_toolchain_id() {
@@ -540,11 +551,29 @@ rocksdb_make_toolchain_id() {
 rocksdb_patch_ctng_install() {
   local functions_path="${GNU_CTNG_ROOT}/share/crosstool-ng/scripts/functions"
   local glibc_build_path="${GNU_CTNG_ROOT}/share/crosstool-ng/scripts/build/libc/glibc.sh"
+  local isl20_chksum_path="${GNU_CTNG_ROOT}/share/crosstool-ng/packages/isl/0.20/chksum"
 
   if [ -f "${functions_path}" ] && ! grep -Fq 'CT_DoExecLog FILE ${CT_TAR:-tar} x -v -f - -C "${dir}" ${components}' "${functions_path}"; then
     sed -i \
       's|CT_DoExecLog FILE tar x -v -f - -C "${dir}" ${components}|CT_DoExecLog FILE ${CT_TAR:-tar} x -v -f - -C "${dir}" ${components}|' \
       "${functions_path}"
+  fi
+
+  if [ -f "${isl20_chksum_path}" ] && grep -Fq 'isl-0.19' "${isl20_chksum_path}"; then
+    cat > "${isl20_chksum_path}" <<'EOF'
+md5 isl-0.20.tar.xz 2ee25141b7d1688afb63e5bf3ac12999
+sha1 isl-0.20.tar.xz 1cb65006e8b047a52534e9a237748e56cfbd2754
+sha256 isl-0.20.tar.xz a5596a9fb8a5b365cb612e4b9628735d6e67e9178fae134a816ae195017e77aa
+sha512 isl-0.20.tar.xz 394bccd22d8e63cb052a60ad8b1a75f4ec43916a9482c66f5167b534b538161179c47919815983b7fbc20dfaa1a590e88b251850aa092bbffc2891635bf30dc4
+md5 isl-0.20.tar.bz2 cb396f31b24aeeac49840b519741b0e1
+sha1 isl-0.20.tar.bz2 b1d96b7b44c72f86c98d4fbd4caaa7796b27681e
+sha256 isl-0.20.tar.bz2 b587e083eb65a8b394e833dea1744f21af3f0e413a448c17536b5549ae42a4c2
+sha512 isl-0.20.tar.bz2 afe2e159b74646a26449268637403d271f9e3f6410d8cc1c9cffca41370c4357b165dea844db0c2a654591f954e54710dda650c8088abd4711406aa6302da950
+md5 isl-0.20.tar.gz f43f6ef445ec5c7e9ec5db42a41f7f28
+sha1 isl-0.20.tar.gz d0d43b6344e048f98666eb2e5181a91eeb360f8c
+sha256 isl-0.20.tar.gz ddc2d7fbd75bd3e3c5b3ea6ee3ef0f805ef9b6b2e5d8cf4c34239a6ea21328a4
+sha512 isl-0.20.tar.gz b73a02285bc0fa412f470f4ac29b07196c4be99248f8257296ed25f0cb73a6782e89eb2461fbf83c6ae2443a88edf52d7214d173b99e5650eb6b0774f8d53658
+EOF
   fi
 
   if [ -f "${glibc_build_path}" ] && \
@@ -601,7 +630,7 @@ import sys
 path = Path(sys.argv[1])
 text = path.read_text()
 old = """        CT_DoLog EXTRA "Installing C library headers"\n        CT_DoExecLog ALL touch "${multi_root}/.libc_headers_installed"\n\n        # use the 'install-headers' makefile target to install the\n"""
-new = """        CT_DoLog EXTRA "Installing C library headers"\n        CT_DoExecLog ALL touch "${multi_root}/.libc_headers_installed"\n\n        # Pre-seed old glibc sunrpc headers so rpcgen helper sources can\n        # include <rpc/types.h> during install-headers on modern hosts.\n        CT_DoExecLog ALL mkdir -p "${multi_root}/usr/include/rpc" "${multi_root}/usr/include/sunrpc/rpc"\n        CT_DoExecLog ALL cp -f "${src_dir}/sunrpc/rpc/types.h" "${multi_root}/usr/include/rpc/types.h"\n        CT_DoExecLog ALL cp -f "${src_dir}/sunrpc/rpc/types.h" "${multi_root}/usr/include/sunrpc/rpc/types.h"\n\n        # use the 'install-headers' makefile target to install the\n"""
+new = """        CT_DoLog EXTRA "Installing C library headers"\n        CT_DoExecLog ALL touch "${multi_root}/.libc_headers_installed"\n\n        # Pre-seed old glibc sunrpc headers so rpcgen helper sources can\n        # include <rpc/types.h> during install-headers on modern hosts.\n        CT_DoExecLog ALL mkdir -p "${multi_root}/usr/include/rpc" "${multi_root}/usr/include/sunrpc/rpc"\n        CT_DoExecLog ALL cp -f "${src_dir}/sunrpc/rpc/types.h" "${multi_root}/usr/include/rpc/types.h"\n        CT_DoExecLog ALL cp -f "${src_dir}/sunrpc/rpc/types.h" "${multi_root}/usr/include/sunrpc/rpc/types.h"\n        CT_DoExecLog ALL mkdir -p rpc sunrpc/rpc\n        CT_DoExecLog ALL cp -f "${src_dir}/sunrpc/rpc/types.h" rpc/types.h\n        CT_DoExecLog ALL cp -f "${src_dir}/sunrpc/rpc/types.h" sunrpc/rpc/types.h\n\n        # use the 'install-headers' makefile target to install the\n"""
 if old in text and "Pre-seed old glibc sunrpc headers" not in text:
     path.write_text(text.replace(old, new, 1))
 PY
@@ -615,9 +644,14 @@ import sys
 path = Path(sys.argv[1])
 text = path.read_text()
 old = """    if [ -d "${src_dir}/sunrpc" ]; then\n        # Add sysroot include paths for old glibc sunrpc helpers.\n        build_cppflags="${build_cppflags} -I${multi_root}/usr/include -I${multi_root}/usr/include/sunrpc"\n    fi\n\n    extra_make_args+=( "BUILD_CFLAGS=${build_cflags}" )\n    extra_make_args+=( "BUILD_CPPFLAGS=${build_cppflags}" )\n"""
-new = """    extra_make_args+=( "BUILD_CFLAGS=${build_cflags}" )\n    extra_make_args+=( "BUILD_CPPFLAGS=${build_cppflags}" )\n"""
+new = """    if [ -d "${src_dir}/sunrpc" ]; then\n        # Old glibc sunrpc host helpers include <rpc/types.h> from the source tree.\n        build_cppflags="${build_cppflags} -I${src_dir}/sunrpc"\n    fi\n\n    extra_make_args+=( "BUILD_CFLAGS=${build_cflags}" )\n    extra_make_args+=( "BUILD_CPPFLAGS=${build_cppflags}" )\n"""
 if old in text:
     path.write_text(text.replace(old, new, 1))
+elif 'build_cppflags="${build_cppflags} -I${src_dir}/sunrpc"' not in text:
+    anchor = """    extra_make_args+=( "BUILD_CFLAGS=${build_cflags}" )\n    extra_make_args+=( "BUILD_CPPFLAGS=${build_cppflags}" )\n"""
+    replacement = """    if [ -d "${src_dir}/sunrpc" ]; then\n        # Old glibc sunrpc host helpers include <rpc/types.h> from the source tree.\n        build_cppflags="${build_cppflags} -I${src_dir}/sunrpc"\n    fi\n\n    extra_make_args+=( "BUILD_CFLAGS=${build_cflags}" )\n    extra_make_args+=( "BUILD_CPPFLAGS=${build_cppflags}" )\n"""
+    if anchor in text:
+        path.write_text(text.replace(anchor, replacement, 1))
 PY
   fi
 }

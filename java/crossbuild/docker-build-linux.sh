@@ -78,6 +78,58 @@ export EXTRA_CXXFLAGS
 export EXTRA_CFLAGS
 export EXTRA_LDFLAGS
 
+rewrite_musl_libc_needed() {
+  local native_path="$1"
+  local native_name
+  local expected_loader=""
+  local dynamic_dump=""
+
+  native_name="$(basename "${native_path}")"
+  case "${native_name}" in
+    librocksdbjni-linux32-musl.so)
+      expected_loader='libc.musl-x86.so.1'
+      ;;
+    librocksdbjni-linux64-musl.so)
+      expected_loader='libc.musl-x86_64.so.1'
+      ;;
+    librocksdbjni-linux-aarch64-musl.so)
+      expected_loader='libc.musl-aarch64.so.1'
+      ;;
+    librocksdbjni-linux-ppc64le-musl.so)
+      expected_loader='libc.musl-ppc64le.so.1'
+      ;;
+    librocksdbjni-linux-s390x-musl.so)
+      expected_loader='libc.musl-s390x.so.1'
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  if hash objdump 2>/dev/null; then
+    dynamic_dump="$(objdump -p "${native_path}" 2>/dev/null || true)"
+  elif hash readelf 2>/dev/null; then
+    dynamic_dump="$(readelf -d "${native_path}" 2>/dev/null || true)"
+  else
+    return 0
+  fi
+
+  if printf '%s\n' "${dynamic_dump}" | grep -Eq "${expected_loader}"; then
+    return 0
+  fi
+
+  if ! printf '%s\n' "${dynamic_dump}" | grep -Eq 'NEEDED[[:space:]]+libc\.so$'; then
+    return 0
+  fi
+
+  if ! hash patchelf 2>/dev/null; then
+    echo "patchelf is required to rewrite musl libc dependency in ${native_path}"
+    exit 1
+  fi
+
+  patchelf --replace-needed libc.so "${expected_loader}" "${native_path}"
+}
+
 validate_no_sanitizer_refs() {
   local native_path="$1"
   local symbol_dump=""
@@ -418,6 +470,7 @@ if [ "${#native_artifacts[@]}" -eq 0 ]; then
 fi
 
 for native_artifact in "${native_artifacts[@]}"; do
+  rewrite_musl_libc_needed "${native_artifact}"
   validate_native_artifact "${native_artifact}"
   validate_no_sanitizer_refs "${native_artifact}"
   validate_gnu_cxx_abi "${native_artifact}"

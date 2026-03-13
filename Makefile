@@ -2278,6 +2278,7 @@ endif
 
 JAVA_STATIC_FLAGS = -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD
 JAVA_STATIC_INCLUDES = -I./zlib-$(ZLIB_VER) -I./bzip2-$(BZIP2_VER) -I./snappy-$(SNAPPY_VER) -I./snappy-$(SNAPPY_VER)/build -I./lz4-$(LZ4_VER)/lib -I./zstd-$(ZSTD_VER)/lib -I./zstd-$(ZSTD_VER)/lib/dictBuilder
+JAVA_STATIC_SYSTEM_LDFLAGS = $(filter-out -lsnappy -lz -lbz2 -llz4 -lzstd,$(EXEC_LDFLAGS) $(LDFLAGS) $(JAVA_STATIC_LDFLAGS))
 
 ifneq ($(findstring rocksdbjavastatic, $(filter-out rocksdbjavastatic_deps, $(MAKECMDGOALS))),)
 CXXFLAGS += $(JAVA_STATIC_FLAGS) $(JAVA_STATIC_INCLUDES)
@@ -2333,10 +2334,10 @@ rocksdbjavastatic_javalib:
 	cd java; $(MAKE) java java_test
 	$(MAKE) $(JNI_NATIVE_OBJECTS)
 	rm -f java/target/$(ROCKSDBJNILIB)
-	$(CXX) $(CXXFLAGS) $(EXEC_LDFLAGS) $(LDFLAGS) -shared -fPIC \
+	$(CXX) $(CXXFLAGS) -shared -fPIC \
 	  -o ./java/target/$(ROCKSDBJNILIB) $(JNI_NATIVE_OBJECTS) \
 	  $(LIB_OBJECTS) $(COVERAGEFLAGS) \
-	  $(JAVA_COMPRESSIONS) $(JAVA_STATIC_LDFLAGS)
+	  $(JAVA_COMPRESSIONS) $(JAVA_STATIC_SYSTEM_LDFLAGS)
 	cd java/target;if [ "$(DEBUG_LEVEL)" == "0" ]; then \
 		$(STRIP) $(STRIPFLAGS) $(ROCKSDBJNILIB); \
 	fi
