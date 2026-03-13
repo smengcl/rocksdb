@@ -589,51 +589,6 @@ for arg in "\$@"; do
   fi
   args+=("\$arg")
 done
-if [ -z "\${gnu_toolchain_root}" ]; then
-  exec "${ROCKSDB_ZIG_ROOT}/zig" c++ -target ${ROCKSDB_CROSS_TRIPLE} ${CROSS_ZIG_CPU:+-mcpu=${CROSS_ZIG_CPU}} "\${args[@]}"
-fi
-
-probe_source=\$(mktemp /tmp/rocksdb-zig-link-probe.XXXXXX.c)
-probe_output=\$(mktemp /tmp/rocksdb-zig-link-probe.XXXXXX.so)
-probe_cache_root=\$(mktemp -d /tmp/rocksdb-zig-link-cache.XXXXXX)
-probe_global_cache_dir="\${probe_cache_root}/global"
-probe_local_cache_dir="\${probe_cache_root}/local"
-mkdir -p "\${probe_global_cache_dir}" "\${probe_local_cache_dir}"
-cleanup_probe_artifacts() {
-  rm -f "\${probe_source}" "\${probe_output}"
-  rm -rf "\${probe_cache_root}"
-}
-trap cleanup_probe_artifacts EXIT
-cat > "\${probe_source}" <<'PROBE_EOF'
-int rocksdb_zig_link_probe(void) {
-  return 0;
-}
-PROBE_EOF
-
-probe_libubsan=
-probe_libc_nonshared=
-probe_libcompiler_rt=
-probe_glibc_dir=
-for _ in 1 2 3 4 5; do
-  probe_log=\$(mktemp)
-  if ! ZIG_GLOBAL_CACHE_DIR="\${probe_global_cache_dir}" ZIG_LOCAL_CACHE_DIR="\${probe_local_cache_dir}" "${ROCKSDB_ZIG_ROOT}/zig" cc -target ${ROCKSDB_CROSS_TRIPLE} ${CROSS_ZIG_CPU:+-mcpu=${CROSS_ZIG_CPU}} -shared -fPIC "\${probe_source}" -o "\${probe_output}" -lc -lm -ldl -lpthread -lrt -v >"\${probe_log}" 2>&1; then
-    cat "\${probe_log}" >&2
-  fi
-  rm -f "\${probe_log}"
-  probe_libubsan=\$(find "\${probe_cache_root}" -type f -name libubsan_rt.a 2>/dev/null | head -n1)
-  probe_libc_nonshared=\$(find "\${probe_cache_root}" -type f -name libc_nonshared.a 2>/dev/null | head -n1)
-  probe_libcompiler_rt=\$(find "\${probe_cache_root}" -type f -name libcompiler_rt.a 2>/dev/null | head -n1)
-  probe_glibc_dir=\$(dirname "\$(find "\${probe_cache_root}" -type f -name libc.so.6 2>/dev/null | head -n1)")
-  if [ -n "\${probe_libc_nonshared}" ] && [ -n "\${probe_libcompiler_rt}" ] && [ -n "\${probe_glibc_dir}" ] && [ "\${probe_glibc_dir}" != "." ]; then
-    break
-  fi
-  sleep 1
-done
-if [ -z "\${probe_libc_nonshared}" ] || [ -z "\${probe_libcompiler_rt}" ] || [ -z "\${probe_glibc_dir}" ] || [ "\${probe_glibc_dir}" = "." ]; then
-  echo "Missing Zig glibc support inputs for final link" >&2
-  find "\${probe_cache_root}" -type f \\( -name libc_nonshared.a -o -name libcompiler_rt.a -o -name libc.so.6 -o -name libubsan_rt.a \\) 2>/dev/null >&2 || true
-  exit 1
-fi
 
 direct_link_args=()
 next_link_arg=
@@ -664,6 +619,173 @@ for arg in "\${args[@]}"; do
       ;;
   esac
 done
+
+probe_source=\$(mktemp /tmp/rocksdb-zig-link-probe.XXXXXX.c)
+probe_output=\$(mktemp /tmp/rocksdb-zig-link-probe.XXXXXX.so)
+probe_cache_root=\$(mktemp -d /tmp/rocksdb-zig-link-cache.XXXXXX)
+probe_global_cache_dir="\${probe_cache_root}/global"
+probe_local_cache_dir="\${probe_cache_root}/local"
+mkdir -p "\${probe_global_cache_dir}" "\${probe_local_cache_dir}"
+cleanup_probe_artifacts() {
+  rm -f "\${probe_source}" "\${probe_output}"
+  rm -rf "\${probe_cache_root}"
+}
+trap cleanup_probe_artifacts EXIT
+cat > "\${probe_source}" <<'PROBE_EOF'
+int rocksdb_zig_link_probe(void) {
+  return 0;
+}
+PROBE_EOF
+
+resolve_probe_path() {
+  local runtime_path="\$1"
+  local runtime_candidate
+  if [ -f "\${runtime_path}" ]; then
+    printf '%s\n' "\${runtime_path}"
+    return 0
+  fi
+  if [[ "\${runtime_path}" != /* ]]; then
+    runtime_candidate="\${PWD}/\${runtime_path}"
+    if [ -f "\${runtime_candidate}" ]; then
+      printf '%s\n' "\${runtime_candidate}"
+      return 0
+    fi
+    runtime_candidate="\${probe_cache_root}/\${runtime_path#.cache/zig/}"
+    if [ -f "\${runtime_candidate}" ]; then
+      printf '%s\n' "\${runtime_candidate}"
+      return 0
+    fi
+    runtime_candidate="\${probe_global_cache_dir}/\${runtime_path#*.cache/zig/global/}"
+    if [ -f "\${runtime_candidate}" ]; then
+      printf '%s\n' "\${runtime_candidate}"
+      return 0
+    fi
+    runtime_candidate="\${probe_local_cache_dir}/\${runtime_path#*.cache/zig/local/}"
+    if [ -f "\${runtime_candidate}" ]; then
+      printf '%s\n' "\${runtime_candidate}"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+if [ -z "\${gnu_toolchain_root}" ]; then
+  rm -f "\${probe_source}"
+  probe_source=\$(mktemp /tmp/rocksdb-zig-link-probe.XXXXXX.cpp)
+  cat > "\${probe_source}" <<'PROBE_EOF'
+int rocksdb_zig_link_probe() {
+  return 0;
+}
+PROBE_EOF
+
+  probe_ld_line=
+  probe_prefix_args=()
+  probe_runtime_args=()
+  probe_saw_no_undefined=0
+  probe_skipped_object=0
+  for _ in 1 2 3 4 5; do
+    probe_log=\$(mktemp)
+    if ! ZIG_GLOBAL_CACHE_DIR="\${probe_global_cache_dir}" ZIG_LOCAL_CACHE_DIR="\${probe_local_cache_dir}" "${ROCKSDB_ZIG_ROOT}/zig" c++ -target ${ROCKSDB_CROSS_TRIPLE} ${CROSS_ZIG_CPU:+-mcpu=${CROSS_ZIG_CPU}} -shared -fPIC "\${probe_source}" -o "\${probe_output}" -v >"\${probe_log}" 2>&1; then
+      cat "\${probe_log}" >&2
+    fi
+    probe_ld_line=\$(grep -E '^ld\\.lld ' "\${probe_log}" | tail -n1)
+    rm -f "\${probe_log}"
+    if [ -n "\${probe_ld_line}" ]; then
+      break
+    fi
+    sleep 1
+  done
+
+  if [ -z "\${probe_ld_line}" ]; then
+    echo "Could not capture Zig link line for final link probe" >&2
+    exit 1
+  fi
+
+  read -r -a probe_parts <<< "\${probe_ld_line}"
+  i=1
+  while [ "\${i}" -lt "\${#probe_parts[@]}" ]; do
+    part="\${probe_parts[\${i}]}"
+    if [ "\${part}" = "-o" ]; then
+      i=\$((i + 2))
+      continue
+    fi
+    if [ "\${part}" = "--no-undefined-version" ]; then
+      probe_prefix_args+=("\${part}")
+      probe_saw_no_undefined=1
+      i=\$((i + 1))
+      continue
+    fi
+    if [ "\${probe_saw_no_undefined}" = "0" ]; then
+      probe_prefix_args+=("\${part}")
+      i=\$((i + 1))
+      continue
+    fi
+    case "\${part}" in
+      *.o|*.a|*.so|*.so.*)
+        if [ "\${probe_skipped_object}" = "0" ]; then
+          probe_skipped_object=1
+        else
+          resolved_part=\$(resolve_probe_path "\${part}" || true)
+          if [ -z "\${resolved_part}" ]; then
+            echo "Could not resolve probe runtime input: \${part}" >&2
+            exit 1
+          fi
+          probe_runtime_args+=("\${resolved_part}")
+        fi
+        ;;
+      *)
+        probe_runtime_args+=("\${part}")
+        ;;
+    esac
+    i=\$((i + 1))
+  done
+
+  if [ "\${#probe_runtime_args[@]}" -eq 0 ]; then
+    echo "Missing Zig runtime inputs for final link" >&2
+    echo "\${probe_ld_line}" >&2
+    exit 1
+  fi
+
+  link_output=\$(mktemp)
+  direct_link_cmd=(
+    "${ROCKSDB_ZIG_ROOT}/zig" ld.lld
+    "\${probe_prefix_args[@]}"
+    "\${direct_link_args[@]}"
+    "\${probe_runtime_args[@]}"
+  )
+  if ! "\${direct_link_cmd[@]}" >"\${link_output}" 2>&1; then
+    cat "\${link_output}" >&2
+    rm -f "\${link_output}"
+    exit 1
+  fi
+  rm -f "\${link_output}"
+  exit 0
+fi
+
+probe_libubsan=
+probe_libc_nonshared=
+probe_libcompiler_rt=
+probe_glibc_dir=
+for _ in 1 2 3 4 5; do
+  probe_log=\$(mktemp)
+  if ! ZIG_GLOBAL_CACHE_DIR="\${probe_global_cache_dir}" ZIG_LOCAL_CACHE_DIR="\${probe_local_cache_dir}" "${ROCKSDB_ZIG_ROOT}/zig" cc -target ${ROCKSDB_CROSS_TRIPLE} ${CROSS_ZIG_CPU:+-mcpu=${CROSS_ZIG_CPU}} -shared -fPIC "\${probe_source}" -o "\${probe_output}" -lc -lm -ldl -lpthread -lrt -v >"\${probe_log}" 2>&1; then
+    cat "\${probe_log}" >&2
+  fi
+  rm -f "\${probe_log}"
+  probe_libubsan=\$(find "\${probe_cache_root}" -type f -name libubsan_rt.a 2>/dev/null | head -n1)
+  probe_libc_nonshared=\$(find "\${probe_cache_root}" -type f -name libc_nonshared.a 2>/dev/null | head -n1)
+  probe_libcompiler_rt=\$(find "\${probe_cache_root}" -type f -name libcompiler_rt.a 2>/dev/null | head -n1)
+  probe_glibc_dir=\$(dirname "\$(find "\${probe_cache_root}" -type f -name libc.so.6 2>/dev/null | head -n1)")
+  if [ -n "\${probe_libc_nonshared}" ] && [ -n "\${probe_libcompiler_rt}" ] && [ -n "\${probe_glibc_dir}" ] && [ "\${probe_glibc_dir}" != "." ]; then
+    break
+  fi
+  sleep 1
+done
+if [ -z "\${probe_libc_nonshared}" ] || [ -z "\${probe_libcompiler_rt}" ] || [ -z "\${probe_glibc_dir}" ] || [ "\${probe_glibc_dir}" = "." ]; then
+  echo "Missing Zig glibc support inputs for final link" >&2
+  find "\${probe_cache_root}" -type f \\( -name libc_nonshared.a -o -name libcompiler_rt.a -o -name libc.so.6 -o -name libubsan_rt.a \\) 2>/dev/null >&2 || true
+  exit 1
+fi
 
 link_output=\$(mktemp)
 direct_link_cmd=(
@@ -712,11 +834,7 @@ EOF
   chmod +x "${CROSS_WRAPPERS_DIR}/cc" "${CROSS_WRAPPERS_DIR}/cxx" "${CROSS_WRAPPERS_DIR}/cxx-link"
   export CC="${CROSS_WRAPPERS_DIR}/cc"
   export CXX="${CROSS_WRAPPERS_DIR}/cxx"
-  if [ -n "${CROSS_GNU_CXX_TOOLCHAIN_ROOT}" ]; then
-    export JAVA_LINK_CXX="${CROSS_WRAPPERS_DIR}/cxx-link"
-  else
-    unset JAVA_LINK_CXX
-  fi
+  export JAVA_LINK_CXX="${CROSS_WRAPPERS_DIR}/cxx-link"
   export TARGET_ARCHITECTURE="${CROSS_TARGET_ARCHITECTURE}"
   export MACHINE="${CROSS_MACHINE}"
   export ARCH="${CROSS_ARCH}"
