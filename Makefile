@@ -2328,12 +2328,13 @@ endif
 endif
 
 CMAKE ?= cmake
+JAVA_LINK_CXX ?= $(CXX)
 rocksdbjavastatic_javalib:
 	# Build JNI headers from both main and test Java sources; javadocs are not required for JNI packaging.
 	cd java; $(MAKE) java java_test
 	$(MAKE) $(JNI_NATIVE_OBJECTS)
 	rm -f java/target/$(ROCKSDBJNILIB)
-	$(CXX) $(CXXFLAGS) $(EXEC_LDFLAGS) $(LDFLAGS) -shared -fPIC \
+	$(JAVA_LINK_CXX) $(CXXFLAGS) $(EXEC_LDFLAGS) $(LDFLAGS) -shared -fPIC \
 	  -o ./java/target/$(ROCKSDBJNILIB) $(JNI_NATIVE_OBJECTS) \
 	  $(LIB_OBJECTS) $(COVERAGEFLAGS) \
 	  $(JAVA_COMPRESSIONS) $(JAVA_STATIC_LDFLAGS)
