@@ -271,8 +271,13 @@ validate_release_linux_abi_ceiling() {
       max_glibcxx='3.4.29'
       max_cxxabi='1.3.13'
       ;;
-    librocksdbjni-linux-aarch64.so|librocksdbjni-linux-ppc64le.so)
+    librocksdbjni-linux-aarch64.so)
       max_glibc='2.17'
+      max_glibcxx='3.4.29'
+      max_cxxabi='1.3.13'
+      ;;
+    librocksdbjni-linux-ppc64le.so)
+      max_glibc='2.19'
       max_glibcxx='3.4.29'
       max_cxxabi='1.3.13'
       ;;
