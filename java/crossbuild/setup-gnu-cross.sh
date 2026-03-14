@@ -229,6 +229,7 @@ rocksdb_map_cross_target() {
 GNU_APT_PACKAGES=()
 GNU_TOOL_PREFIX=
 GNU_TOOLCHAIN_KIND=
+GNU_USE_SYSTEM_TOOLCHAIN=n
 GNU_USE_OLD_HOST_COMPILER=n
 GNU_HOST_CC=
 GNU_HOST_CXX=
@@ -303,11 +304,15 @@ GNU_CTNG_URL=
       CROSS_ARCH=64
       CROSS_JNI_LIBC=
       GNU_TOOLCHAIN_KIND=glibc
-      GNU_CTNG_SAMPLE=powerpc64le-unknown-linux-gnu
-      GNU_CTNG_VERSION="${ROCKSDB_GNU_CROSS_CTNG_VERSION_GLIBC}"
-      GNU_CTNG_BINUTILS_VERSION="${ROCKSDB_GNU_CROSS_BINUTILS_VERSION_MODERN}"
-      GNU_CTNG_GCC_VERSION="${ROCKSDB_GNU_CROSS_GCC_VERSION_PPC64LE}"
-      GNU_CTNG_GLIBC_VERSION="${ROCKSDB_GNU_CROSS_GLIBC_VERSION_PPC64LE}"
+      GNU_USE_SYSTEM_TOOLCHAIN=y
+      GNU_TOOL_PREFIX=powerpc64le-linux-gnu
+      GNU_APT_PACKAGES=(
+        binutils-powerpc64le-linux-gnu
+        gcc-powerpc64le-linux-gnu
+        g++-powerpc64le-linux-gnu
+        libc6-dev-ppc64el-cross
+        linux-libc-dev-ppc64el-cross
+      )
       ;;
     powerpc64le-linux-musl)
       CROSS_SYSTEM_PROCESSOR=ppc64le
@@ -806,6 +811,15 @@ rocksdb_setup_gnu_cross_toolchain() {
   local toolchain_bin
 
   rocksdb_map_cross_target
+  if [ "${GNU_USE_SYSTEM_TOOLCHAIN}" = "y" ]; then
+    rocksdb_install_apt_packages "${ROCKSDB_GNU_COMMON_PACKAGES[@]}" "${GNU_APT_PACKAGES[@]}"
+    toolchain_bin="/usr/bin"
+    rocksdb_export_cross_toolchain "${toolchain_bin}"
+    for tool in "${CC}" "${CXX}" "${AR}" "${AS}" "${LD}" "${NM}" "${OBJDUMP}" "${RANLIB}" "${READELF}" "${STRIP}"; do
+      test -x "${tool}"
+    done
+    return 0
+  fi
   rocksdb_select_ctng_runtime
   rocksdb_prefetch_legacy_ctng_tarballs
 
