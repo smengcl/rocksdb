@@ -207,7 +207,13 @@ jobs:
           set -euxo pipefail
           java -version
           javac -version
-          make DEBUG_LEVEL="${DEBUG_LEVEL}" J="${J}" rocksdbjavastaticosx
+          # USE_RTTI=0: DEBUG_LEVEL=1 enables RTTI by default, which makes the
+          # snappy Sink subclass in compression.cc reference "typeinfo for
+          # snappy::Sink". The bundled snappy is built without RTTI, so on the
+          # macOS x86_64 cross-link that typeinfo is missing (Mach-O has no weak
+          # fallback like ELF). Release builds -fno-rtti and links fine, so match
+          # that here; the debug jar still differs by assertions + kept symbols.
+          make DEBUG_LEVEL="${DEBUG_LEVEL}" USE_RTTI=0 J="${J}" rocksdbjavastaticosx
       - uses: actions/upload-artifact@v6
         with:
           name: rocksdbjni-debug-osx
@@ -218,22 +224,29 @@ jobs:
             java/target/rocksdbjni-*-osx.jar
             java/target/rocksdbjni-*-osx.jar.sha1
 
+  # win64 is built in Release even in the debug jar. A debug MinGW build exports
+  # every symbol (the cross-build uses a Linux jni.h, so the JNI entry points are
+  # not __declspec(dllexport) and MinGW falls back to exporting all symbols).
+  # Debug object counts blow past Windows' 16-bit export-ordinal limit
+  # ("export ordinal too large"), and --exclude-all-symbols would drop the JNI
+  # exports too, producing an unusable DLL. So the debug jar ships a release
+  # win64 native; debug coverage is provided by the linux and osx natives.
   build-win64:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
-      DEBUG_LEVEL: 1
-      CMAKE_BUILD_TYPE: Debug
+      DEBUG_LEVEL: 0
+      CMAKE_BUILD_TYPE: Release
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "8"
-      - name: Verify Debug Mode
+      - name: Verify win64 Build Mode
         run: |
           set -euxo pipefail
-          test "${CMAKE_BUILD_TYPE}" = "Debug"
+          test "${CMAKE_BUILD_TYPE}" = "Release"
       - name: Install Mingw Toolchain
         run: |
           set -euxo pipefail
