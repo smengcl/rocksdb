@@ -2267,6 +2267,15 @@ libsnappy.a: snappy-$(SNAPPY_VER).tar.gz
 	-rm -rf snappy-$(SNAPPY_VER)
 	tar xvzf snappy-$(SNAPPY_VER).tar.gz
 	mkdir snappy-$(SNAPPY_VER)/build
+# Snappy's CMakeLists force-disables RTTI (strips -frtti, appends -fno-rtti), so
+# it never emits "typeinfo for snappy::Sink". A DEBUG_LEVEL>=1 RocksDB build has
+# RTTI on (its asserts use dynamic_cast) and its snappy Sink subclass references
+# that typeinfo; on Mach-O the link then fails (ELF tolerates it via weak
+# typeinfo). Set ROCKSDB_JAVA_SNAPPY_RTTI=1 to drop snappy's -fno-rtti so the
+# typeinfo is emitted. Opt-in, so release and non-osx builds are unaffected.
+ifeq ($(ROCKSDB_JAVA_SNAPPY_RTTI),1)
+	sed -i.bak 's/-fno-rtti//g' snappy-$(SNAPPY_VER)/CMakeLists.txt
+endif
 	cd snappy-$(SNAPPY_VER)/build && CFLAGS='$(ARCHFLAG) ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' CXXFLAGS='$(ARCHFLAG) ${JAVA_STATIC_DEPS_CXXFLAGS} ${EXTRA_CXXFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' cmake -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DSNAPPY_BUILD_BENCHMARKS=OFF -DSNAPPY_BUILD_TESTS=OFF ${PLATFORM_CMAKE_FLAGS} .. && $(MAKE) ${SNAPPY_MAKE_TARGET}
 	cp snappy-$(SNAPPY_VER)/build/libsnappy.a .
 
