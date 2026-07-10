@@ -1045,21 +1045,27 @@ validate_classifier_jar() {
   fi
 }
 
+# DEBUG_LEVEL must be passed on the make command line, not just the environment:
+# the Makefile forces DEBUG_LEVEL=0 for rocksdbjavastatic goals unless the value
+# is 2, and that makefile assignment overrides an environment value but not a
+# command-line one. Default to 0 so release builds are unaffected when unset.
+DEBUG_LEVEL="${DEBUG_LEVEL:-0}"
+
 # Use scl devtoolset if available
 if hash scl 2>/dev/null; then
   DEVTOOLSET=$(scl --list | tr ' ' '\n' | grep -E '^devtoolset-[0-9]+$' | sort -V | tail -1)
   if [ -n "${DEVTOOLSET}" ]; then
     echo "Using ${DEVTOOLSET}"
     scl enable "${DEVTOOLSET}" 'make clean-not-downloaded'
-    scl enable "${DEVTOOLSET}" "make -j${J} rocksdbjavastatic"
+    scl enable "${DEVTOOLSET}" "make -j${J} DEBUG_LEVEL=${DEBUG_LEVEL} rocksdbjavastatic"
   else
     echo "Could not find devtoolset, falling back to system toolchain"
     make clean-not-downloaded
-    make -j"${J}" rocksdbjavastatic
+    make -j"${J}" DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastatic
   fi
 else
   make clean-not-downloaded
-  make -j"${J}" rocksdbjavastatic
+  make -j"${J}" DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastatic
 fi
 
 shopt -s nullglob
