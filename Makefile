@@ -16,7 +16,8 @@ CXXFLAGS += ${EXTRA_CXXFLAGS}
 LDFLAGS += $(EXTRA_LDFLAGS)
 MACHINE ?= $(shell uname -m)
 ARFLAGS = ${EXTRA_ARFLAGS} rs
-STRIPFLAGS = -S -x
+STRIP ?= strip
+STRIPFLAGS ?= -S -x
 
 # Transform parallel LOG output into something more readable.
 perl_command = perl -n \
@@ -265,6 +266,9 @@ JAVA_STATIC_LDFLAGS += $(ROCKSDB_PLUGIN_LDFLAGS)
 ROCKSDB_PLUGIN_JNI_NATIVE_SOURCES = $(foreach plugin, $(ROCKSDB_PLUGINS), $(foreach source, $($(plugin)_JNI_NATIVE_SOURCES), plugin/$(plugin)/$(source)))
 ALL_JNI_NATIVE_SOURCES = $(JNI_NATIVE_SOURCES) $(ROCKSDB_PLUGIN_JNI_NATIVE_SOURCES)
 ROCKSDB_PLUGIN_JNI_CXX_INCLUDEFLAGS = $(foreach plugin, $(ROCKSDB_PLUGINS), -I./plugin/$(plugin))
+JNI_NATIVE_INCLUDE_FLAGS = -I./java/. -I./java/rocksjni $(JAVA_INCLUDE) $(ROCKSDB_PLUGIN_JNI_CXX_INCLUDEFLAGS)
+JNI_NATIVE_OBJECT_DIR = java/target/jni/$(ROCKSDBJNILIB)
+JNI_NATIVE_OBJECTS = $(addprefix $(JNI_NATIVE_OBJECT_DIR)/,$(ALL_JNI_NATIVE_SOURCES:.cc=.o))
 
 ifneq ($(strip $(ROCKSDB_PLUGIN_PKGCONFIG_REQUIRES)),)
 LDFLAGS := $(LDFLAGS) $(shell pkg-config --libs $(ROCKSDB_PLUGIN_PKGCONFIG_REQUIRES))
@@ -936,6 +940,28 @@ prioritize_long_running_tests =						\
 # The default is to run one job per core (J=100%).
 # See "man parallel" for its "-j ..." option.
 J ?= 100%
+
+define resolve_make_jobs
+$(strip $(shell \
+	J_VALUE='$(strip $(1))'; \
+	if [ -z "$$J_VALUE" ]; then J_VALUE='100%'; fi; \
+	if [ "$${J_VALUE%\%}" != "$$J_VALUE" ]; then \
+		J_PERCENT="$${J_VALUE%\%}"; \
+		if printf '%s' "$$J_PERCENT" | grep -Eq '^[0-9]+$$'; then \
+			CPU_COUNT="$$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 1)"; \
+			J_VALUE=$$(( (CPU_COUNT * J_PERCENT + 99) / 100 )); \
+			if [ "$$J_VALUE" -lt 1 ]; then J_VALUE=1; fi; \
+		else \
+			J_VALUE=1; \
+		fi; \
+	elif ! printf '%s' "$$J_VALUE" | grep -Eq '^[0-9]+$$'; then \
+		J_VALUE=1; \
+	fi; \
+	printf '%s' "$$J_VALUE"))
+endef
+
+ROCKSDB_JAVA_MAKE_JOBS ?= $(call resolve_make_jobs,$(J))
+ROCKSDB_JAVA_MAKE_PARALLEL_FLAGS = -j$(ROCKSDB_JAVA_MAKE_JOBS)
 
 # Use this regexp to select the subset of tests whose names match.
 tests-regexp = .
@@ -2092,6 +2118,7 @@ gen-pc:
 # Jni stuff
 # ---------------------------------------------------------------------------
 JAVA_INCLUDE = -I$(JAVA_HOME)/include/ -I$(JAVA_HOME)/include/linux
+ifeq ($(origin ARCH), undefined)
 ifeq ($(PLATFORM), OS_SOLARIS)
 	ARCH := $(shell isainfo -b)
 else ifeq ($(PLATFORM), OS_OPENBSD)
@@ -2103,9 +2130,14 @@ else ifeq ($(PLATFORM), OS_OPENBSD)
 else
 	ARCH := $(shell getconf LONG_BIT)
 endif
+endif
 
-ifeq ($(shell ldd /usr/bin/env 2>/dev/null | grep -q musl; echo $$?),0)
+ifneq ($(origin ROCKSDB_CROSS_LIBC), undefined)
+ifeq ($(ROCKSDB_CROSS_LIBC),musl)
         JNI_LIBC = musl
+endif
+else ifeq ($(shell ldd /usr/bin/env 2>/dev/null | grep -q musl; echo $$?),0)
+	JNI_LIBC = musl
 # GNU LibC (or glibc) is so pervasive we can assume it is the default
 # else
 #        JNI_LIBC = glibc
@@ -2132,6 +2164,7 @@ SHA256_CMD = sha256sum
 ZLIB_VER ?= 1.3.1
 ZLIB_SHA256 ?= 9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
 ZLIB_DOWNLOAD_BASE ?= http://zlib.net
+ZLIB_FOSSILS_DOWNLOAD_BASE ?= https://zlib.net/fossils
 BZIP2_VER ?= 1.0.8
 BZIP2_SHA256 ?= ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269
 BZIP2_DOWNLOAD_BASE ?= http://sourceware.org/pub/bzip2
@@ -2190,7 +2223,8 @@ endif
 export SHA256_CMD
 
 zlib-$(ZLIB_VER).tar.gz:
-	curl --fail --output zlib-$(ZLIB_VER).tar.gz --location ${ZLIB_DOWNLOAD_BASE}/zlib-$(ZLIB_VER).tar.gz
+	curl --fail --output zlib-$(ZLIB_VER).tar.gz --location ${ZLIB_DOWNLOAD_BASE}/zlib-$(ZLIB_VER).tar.gz \
+		|| curl --fail --output zlib-$(ZLIB_VER).tar.gz --location ${ZLIB_FOSSILS_DOWNLOAD_BASE}/zlib-$(ZLIB_VER).tar.gz
 	ZLIB_SHA256_ACTUAL=`$(SHA256_CMD) zlib-$(ZLIB_VER).tar.gz | cut -d ' ' -f 1`; \
 	if [ "$(ZLIB_SHA256)" != "$$ZLIB_SHA256_ACTUAL" ]; then \
 		echo zlib-$(ZLIB_VER).tar.gz checksum mismatch, expected=\"$(ZLIB_SHA256)\" actual=\"$$ZLIB_SHA256_ACTUAL\"; \
@@ -2201,9 +2235,9 @@ libz.a: zlib-$(ZLIB_VER).tar.gz
 	-rm -rf zlib-$(ZLIB_VER)
 	tar xvzf zlib-$(ZLIB_VER).tar.gz
 	if [ -n"$(ARCHFLAG)" ]; then \
-		cd zlib-$(ZLIB_VER) && CFLAGS='-fPIC ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' ./configure --static --archs="$(ARCHFLAG)" && $(MAKE);  \
+		cd zlib-$(ZLIB_VER) && CFLAGS='-fPIC ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' ./configure --static --archs="$(ARCHFLAG)" && $(MAKE) libz.a;  \
 	else \
-		cd zlib-$(ZLIB_VER) && CFLAGS='-fPIC ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' ./configure --static && $(MAKE);  \
+		cd zlib-$(ZLIB_VER) && CFLAGS='-fPIC ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' ./configure --static && $(MAKE) libz.a;  \
 	fi
 	cp zlib-$(ZLIB_VER)/libz.a .
 
@@ -2218,7 +2252,7 @@ bzip2-$(BZIP2_VER).tar.gz:
 libbz2.a: bzip2-$(BZIP2_VER).tar.gz
 	-rm -rf bzip2-$(BZIP2_VER)
 	tar xvzf bzip2-$(BZIP2_VER).tar.gz
-	cd bzip2-$(BZIP2_VER) && $(MAKE) CFLAGS='-fPIC -O2 -g -D_FILE_OFFSET_BITS=64 $(ARCHFLAG) ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' AR='ar ${EXTRA_ARFLAGS}' libbz2.a
+	cd bzip2-$(BZIP2_VER) && $(MAKE) CC='$(CC)' CFLAGS='-fPIC -O2 -g -D_FILE_OFFSET_BITS=64 $(ARCHFLAG) ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' AR='ar ${EXTRA_ARFLAGS}' libbz2.a
 	cp bzip2-$(BZIP2_VER)/libbz2.a .
 
 snappy-$(SNAPPY_VER).tar.gz:
@@ -2247,7 +2281,7 @@ lz4-$(LZ4_VER).tar.gz:
 liblz4.a: lz4-$(LZ4_VER).tar.gz
 	-rm -rf lz4-$(LZ4_VER)
 	tar xvzf lz4-$(LZ4_VER).tar.gz
-	cd lz4-$(LZ4_VER)/lib && $(MAKE) CFLAGS='-fPIC -O2 $(ARCHFLAG) ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' all
+	cd lz4-$(LZ4_VER)/lib && $(MAKE) CC='$(CC)' CFLAGS='-fPIC -O2 $(ARCHFLAG) ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' liblz4.a
 	cp lz4-$(LZ4_VER)/lib/liblz4.a .
 
 zstd-$(ZSTD_VER).tar.gz:
@@ -2261,7 +2295,7 @@ zstd-$(ZSTD_VER).tar.gz:
 libzstd.a: zstd-$(ZSTD_VER).tar.gz
 	-rm -rf zstd-$(ZSTD_VER)
 	tar xvzf zstd-$(ZSTD_VER).tar.gz
-	cd zstd-$(ZSTD_VER)/lib && DESTDIR=. PREFIX= $(MAKE) CFLAGS='-fPIC -O2 $(ARCHFLAG) ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' libzstd.a
+	cd zstd-$(ZSTD_VER)/lib && DESTDIR=. PREFIX= $(MAKE) CC='$(CC)' CFLAGS='-fPIC -O2 $(ARCHFLAG) ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' libzstd.a
 	cp zstd-$(ZSTD_VER)/lib/libzstd.a .
 
 # A version of each $(LIB_OBJECTS) compiled with -fPIC and a fixed set of static compression libraries
@@ -2304,13 +2338,13 @@ rocksdbjavastaticosx_archs:
 
 rocksdbjavastaticosx_arch_%:
 ifeq ($(JAVA_HOME),)
-	$(error JAVA_HOME is not set)
+		$(error JAVA_HOME is not set)
 endif
-	$(MAKE) clean-ext-libraries-bin
-	$(MAKE) clean-rocks
-	ARCHFLAG="-arch $*" $(MAKE) rocksdbjavastatic_deps
-	ARCHFLAG="-arch $*" $(MAKE) rocksdbjavastatic_libobjects
-	ARCHFLAG="-arch $*" ROCKSDBJNILIB="librocksdbjni-osx-$*.jnilib" $(MAKE) rocksdbjavastatic_javalib
+		$(MAKE) clean-ext-libraries-bin
+		$(MAKE) clean-rocks
+		ARCHFLAG="-arch $*" $(MAKE) $(ROCKSDB_JAVA_MAKE_PARALLEL_FLAGS) rocksdbjavastatic_deps
+		ARCHFLAG="-arch $*" $(MAKE) $(ROCKSDB_JAVA_MAKE_PARALLEL_FLAGS) rocksdbjavastatic_libobjects
+		ARCHFLAG="-arch $*" ROCKSDBJNILIB="librocksdbjni-osx-$*.jnilib" $(MAKE) $(ROCKSDB_JAVA_MAKE_PARALLEL_FLAGS) rocksdbjavastatic_javalib
 
 ifeq ($(JAR_CMD),)
 ifneq ($(JAVA_HOME),)
@@ -2319,15 +2353,20 @@ else
 JAR_CMD := jar
 endif
 endif
+
+CMAKE ?= cmake
+JAVA_LINK_CXX ?= $(CXX)
 rocksdbjavastatic_javalib:
-	cd java; $(MAKE) javalib
+	# Build JNI headers from both main and test Java sources; javadocs are not required for JNI packaging.
+	cd java; $(MAKE) java java_test
+	$(MAKE) $(JNI_NATIVE_OBJECTS)
 	rm -f java/target/$(ROCKSDBJNILIB)
-	$(CXX) $(CXXFLAGS) -I./java/. $(JAVA_INCLUDE) -shared -fPIC \
-	  -o ./java/target/$(ROCKSDBJNILIB) $(ALL_JNI_NATIVE_SOURCES) \
+	$(JAVA_LINK_CXX) $(CXXFLAGS) $(EXEC_LDFLAGS) $(LDFLAGS) -shared -fPIC \
+	  -o ./java/target/$(ROCKSDBJNILIB) $(JNI_NATIVE_OBJECTS) \
 	  $(LIB_OBJECTS) $(COVERAGEFLAGS) \
 	  $(JAVA_COMPRESSIONS) $(JAVA_STATIC_LDFLAGS)
 	cd java/target;if [ "$(DEBUG_LEVEL)" == "0" ]; then \
-		strip $(STRIPFLAGS) $(ROCKSDBJNILIB); \
+		$(STRIP) $(STRIPFLAGS) $(ROCKSDBJNILIB); \
 	fi
 
 rocksdbjava_jar:
@@ -2337,6 +2376,7 @@ rocksdbjava_jar:
 	openssl sha1 java/target/$(ROCKSDB_JAR) | sed 's/.*= \([0-9a-f]*\)/\1/' > java/target/$(ROCKSDB_JAR).sha1
 
 rocksdbjava_javadocs_jar:
+	cd java; $(MAKE) javadocs
 	cd java/target/apidocs; $(JAR_CMD) -cf ../$(ROCKSDB_JAVADOCS_JAR) *
 	openssl sha1 java/target/$(ROCKSDB_JAVADOCS_JAR) | sed 's/.*= \([0-9a-f]*\)/\1/' > java/target/$(ROCKSDB_JAVADOCS_JAR).sha1
 
@@ -2351,69 +2391,211 @@ rocksdbjavastatic_libobjects: $(LIB_OBJECTS)
 rocksdbjavastaticrelease: rocksdbjavastaticosx rocksdbjava_javadocs_jar rocksdbjava_sources_jar
 	cd java/crossbuild && (vagrant destroy -f || true) && vagrant up linux32 && vagrant halt linux32 && vagrant up linux64 && vagrant halt linux64 && vagrant up linux64-musl && vagrant halt linux64-musl
 	cd java; $(JAR_CMD) -cf target/$(ROCKSDB_JAR_ALL) HISTORY*.md
-	cd java/target; $(JAR_CMD) -uf $(ROCKSDB_JAR_ALL) librocksdbjni-*.so librocksdbjni-*.jnilib
+	cd java/target; \
+		JAR_FILES="librocksdbjni-*.so librocksdbjni-*.jnilib"; \
+		if ls librocksdbjni-*.dll >/dev/null 2>&1; then JAR_FILES="$$JAR_FILES librocksdbjni-*.dll"; fi; \
+		$(JAR_CMD) -uf $(ROCKSDB_JAR_ALL) $$JAR_FILES
 	cd java/target/classes; $(JAR_CMD) -uf ../$(ROCKSDB_JAR_ALL) org/rocksdb/*.class org/rocksdb/util/*.class
 	openssl sha1 java/target/$(ROCKSDB_JAR_ALL) | sed 's/.*= \([0-9a-f]*\)/\1/' > java/target/$(ROCKSDB_JAR_ALL).sha1
 
-rocksdbjavastaticreleasedocker: rocksdbjavastaticosx rocksdbjavastaticdockerx86 rocksdbjavastaticdockerx86_64 rocksdbjavastaticdockerx86musl rocksdbjavastaticdockerx86_64musl rocksdbjava_javadocs_jar rocksdbjava_sources_jar
+ROCKSDB_JAVA_FATJAR_NATIVE_LIBS = \
+	librocksdbjni-linux32.so \
+	librocksdbjni-linux64.so \
+	librocksdbjni-linux32-musl.so \
+	librocksdbjni-linux64-musl.so \
+	librocksdbjni-linux-aarch64.so \
+	librocksdbjni-linux-aarch64-musl.so \
+	librocksdbjni-linux-ppc64le.so \
+	librocksdbjni-linux-ppc64le-musl.so \
+	librocksdbjni-linux-s390x.so \
+	librocksdbjni-linux-s390x-musl.so \
+	librocksdbjni-linux-riscv64.so \
+	librocksdbjni-osx-arm64.jnilib \
+	librocksdbjni-osx-x86_64.jnilib \
+	librocksdbjni-win64.dll
+
+ROCKSDB_JAVA_WIN64_BUILD_DIR ?= build-mingw
+ROCKSDB_JAVA_WIN64_CMAKE_FLAGS ?= \
+	-DJNI=1 \
+	-DWITH_GFLAGS=OFF \
+	-DBUILD_SHARED_LIBS=ON \
+	-DROCKSDB_BUILD_SHARED=ON \
+	-DPORTABLE=1 \
+	-DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
+	-DCMAKE_SYSTEM_NAME=Windows \
+	-DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+	-DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
+	-DCMAKE_C_FLAGS=-Wno-error=maybe-uninitialized \
+	-DCMAKE_CXX_FLAGS=-Wno-error=maybe-uninitialized
+
+ifneq (,$(filter arm64 aarch64,$(MACHINE)))
+ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM ?= linux/arm64
+ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE ?= evolvedbinary/rocksjava:alpine3_arm64v8-be
+else
+ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM ?= linux/amd64
+ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE ?= evolvedbinary/rocksjava:alpine3_x64-be
+endif
+ROCKSDB_JAVA_LINUX_X64_GNU_DOCKER_PLATFORM ?= linux/amd64
+ROCKSDB_JAVA_LINUX_X64_GNU_DOCKER_IMAGE ?= evolvedbinary/rocksjava:centos7_x64-be
+
+ROCKSDB_JAVA_FATJAR_BUILD_TARGETS = \
+	rocksdbjavastaticosx \
+	rocksdbjavastaticdockerx86 \
+	rocksdbjavastaticdockerx86_64 \
+	rocksdbjavastaticdockerarm64v8 \
+	rocksdbjavastaticdockerppc64le \
+	rocksdbjavastaticdockers390x \
+	rocksdbjavastaticdockerriscv64 \
+	rocksdbjavastaticdockerx86musl \
+	rocksdbjavastaticdockerx86_64musl \
+	rocksdbjavastaticdockerarm64v8musl \
+	rocksdbjavastaticdockerppc64lemusl \
+	rocksdbjavastaticdockers390xmusl \
+	rocksdbjavastaticwin64 \
+	rocksdbjava_javadocs_jar \
+	rocksdbjava_sources_jar
+
+rocksdbjavastaticfatjarassemble:
+	cd java; $(MAKE) java
+	@for native in $(ROCKSDB_JAVA_FATJAR_NATIVE_LIBS); do \
+		test -f "java/target/$$native" || { echo "Missing fat-jar native: $$native"; exit 1; }; \
+	done
 	cd java; $(JAR_CMD) -cf target/$(ROCKSDB_JAR_ALL) HISTORY*.md
-	cd java/target; $(JAR_CMD) -uf $(ROCKSDB_JAR_ALL) librocksdbjni-*.so librocksdbjni-*.jnilib
+	cd java/target; $(JAR_CMD) -uf $(ROCKSDB_JAR_ALL) $(ROCKSDB_JAVA_FATJAR_NATIVE_LIBS)
 	cd java/target/classes; $(JAR_CMD) -uf ../$(ROCKSDB_JAR_ALL) org/rocksdb/*.class org/rocksdb/util/*.class
 	openssl sha1 java/target/$(ROCKSDB_JAR_ALL) | sed 's/.*= \([0-9a-f]*\)/\1/' > java/target/$(ROCKSDB_JAR_ALL).sha1
+
+rocksdbjavastaticwin64: CMAKE_BUILD_TYPE=Release
+rocksdbjavastaticwin64:
+	@if [ -z "$(JAVA_HOME)" ]; then \
+		echo "JAVA_HOME must point to a JDK 8 installation"; \
+		exit 1; \
+	fi
+	@command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1 || { \
+		echo "x86_64-w64-mingw32-gcc not found; install mingw-w64 first"; \
+		exit 1; \
+	}
+	@command -v x86_64-w64-mingw32-g++ >/dev/null 2>&1 || { \
+		echo "x86_64-w64-mingw32-g++ not found; install mingw-w64 first"; \
+		exit 1; \
+	}
+	mkdir -p java/target
+	$(CMAKE) -S . -B $(ROCKSDB_JAVA_WIN64_BUILD_DIR) $(ROCKSDB_JAVA_WIN64_CMAKE_FLAGS)
+	$(CMAKE) --build $(ROCKSDB_JAVA_WIN64_BUILD_DIR) --target rocksdbjava -- -j"$$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+	@WIN64_DLL="$$(find $(ROCKSDB_JAVA_WIN64_BUILD_DIR) -type f -name 'librocksdbjni-win64.dll' | head -n1)"; \
+	WIN64_JAR="$$(find $(ROCKSDB_JAVA_WIN64_BUILD_DIR) -type f -name 'rocksdbjni-*-win64.jar' | head -n1)"; \
+	test -n "$$WIN64_DLL"; \
+	test -n "$$WIN64_JAR"; \
+	cp "$$WIN64_DLL" java/target/; \
+	cp "$$WIN64_JAR" java/target/; \
+	openssl sha1 "$$WIN64_JAR" | sed 's/.*= \([0-9a-f]*\)/\1/' > "java/target/$$(basename "$$WIN64_JAR").sha1"
+
+rocksdbjavastaticfatjar: DEBUG_LEVEL=0
+rocksdbjavastaticfatjar: CMAKE_BUILD_TYPE=Release
+rocksdbjavastaticfatjar:
+	@set -e; \
+	for target in $(ROCKSDB_JAVA_FATJAR_BUILD_TARGETS); do \
+		$(MAKE) "$$target"; \
+	done
+	$(MAKE) rocksdbjavastaticfatjarassemble
+
+rocksdbjavastaticreleasedocker:
+	$(MAKE) rocksdbjavastaticfatjar
 
 rocksdbjavastaticdockerx86:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_x86-be --platform linux/386 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:centos7_x86-be /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_x86-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=x86-linux-gnu $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) bash /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerx86_64:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_x64-be --platform linux/amd64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:centos7_x64-be /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_x64-be --platform $(ROCKSDB_JAVA_LINUX_X64_GNU_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_VALIDATE_X86_64_GNU_ABI=1 --env ROCKSDB_DISABLE_SNAPPY=1 --env ROCKSDB_DISABLE_ZLIB=1 --env ROCKSDB_DISABLE_BZIP=1 --env ROCKSDB_DISABLE_LZ4=1 --env ROCKSDB_DISABLE_ZSTD=1 --env DISABLE_JEMALLOC=1 $(ROCKSDB_JAVA_LINUX_X64_GNU_DOCKER_IMAGE) bash /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerppc64le:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_ppc64le-be --platform linux/ppc64le --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:centos7_ppc64le-be /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_ppc64le-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=powerpc64le-linux-gnu $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) bash /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerarm64v8:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_arm64v8-be --platform linux/aarch64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:centos7_arm64v8-be /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_arm64v8-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=aarch64-linux-gnu $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) bash /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockers390x:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_s390x-be --platform linux/s390x --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:ubuntu18_s390x-be /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_s390x-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=s390x-linux-gnu $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) bash /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerriscv64:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_riscv64-be --platform linux/riscv64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:ubuntu20_riscv64-be /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_riscv64-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=riscv64-linux-gnu $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) bash /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerx86musl:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_x86-musl-be --platform linux/386 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:alpine3_x86-be /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_x86-musl-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=x86-linux-musl $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) bash /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerx86_64musl:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_x64-musl-be --platform linux/amd64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:alpine3_x64-be /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_x64-musl-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=x86_64-linux-musl $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) bash /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerppc64lemusl:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_ppc64le-musl-be --platform linux/ppc64le --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:alpine3_ppc64le-be /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_ppc64le-musl-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=powerpc64le-linux-musl $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) bash /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockerarm64v8musl:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_arm64v8-musl-be --platform linux/aarch64 --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:alpine3_arm64v8-be /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_arm64v8-musl-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=aarch64-linux-musl $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) bash /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
 rocksdbjavastaticdockers390xmusl:
 	mkdir -p java/target
-	docker run --rm --name rocksdb_linux_s390x-musl-be --platform linux/s390x --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) evolvedbinary/rocksjava:alpine3_s390x-be /rocksdb-host/java/crossbuild/docker-build-linux.sh
+	docker run --rm --name rocksdb_linux_s390x-musl-be --platform $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_PLATFORM) --attach stdin --attach stdout --attach stderr --volume $(HOME)/.m2:/root/.m2:ro --volume `pwd`:/rocksdb-host:ro --volume /rocksdb-local-build --volume `pwd`/java/target:/rocksdb-java-target --env DEBUG_LEVEL=$(DEBUG_LEVEL) --env J=$(J) --env ROCKSDB_CROSS_TRIPLE=s390x-linux-musl $(ROCKSDB_JAVA_LINUX_ZIG_DOCKER_IMAGE) bash /rocksdb-host/java/crossbuild/docker-build-linux.sh
 
-rocksdbjavastaticpublish: rocksdbjavastaticrelease rocksdbjavastaticpublishcentral
+ROCKSDB_JAVA_RELEASE_CLASSIFIERS = \
+	javadoc \
+	sources \
+	linux32 \
+	linux64 \
+	linux32-musl \
+	linux64-musl \
+	linux-aarch64 \
+	linux-aarch64-musl \
+	linux-ppc64le \
+	linux-ppc64le-musl \
+	linux-s390x \
+	linux-s390x-musl \
+	linux-riscv64 \
+	osx \
+	win64
 
-rocksdbjavastaticpublishdocker: rocksdbjavastaticreleasedocker rocksdbjavastaticpublishcentral
+ROCKSDB_JAVA_PUBLISH_REPOSITORY_DIR ?= java/target/maven-central
+ROCKSDB_JAVA_PUBLISH_BUNDLE_DIR = $(ROCKSDB_JAVA_PUBLISH_REPOSITORY_DIR)/org/rocksdb/rocksdbjni/$(ROCKSDB_JAVA_VERSION)
+ROCKSDB_JAVA_POM_ARTIFACT = rocksdbjni-$(ROCKSDB_JAVA_VERSION).pom
+ROCKSDB_JAVA_RELEASE_ARTIFACTS = \
+	java/target/$(ROCKSDB_JAVA_POM_ARTIFACT) \
+	java/target/rocksdbjni-$(ROCKSDB_JAVA_VERSION).jar \
+	$(foreach classifier,$(ROCKSDB_JAVA_RELEASE_CLASSIFIERS),java/target/rocksdbjni-$(ROCKSDB_JAVA_VERSION)-$(classifier).jar)
 
-ROCKSDB_JAVA_RELEASE_CLASSIFIERS = javadoc sources linux64 linux32 linux64-musl linux32-musl osx win64
+rocksdbjavastaticpreparepomartifact: rocksdbjavageneratepom
+	cp java/pom.xml java/target/$(ROCKSDB_JAVA_POM_ARTIFACT)
+	openssl sha1 java/target/$(ROCKSDB_JAVA_POM_ARTIFACT) | sed 's/.*= \([0-9a-f]*\)/\1/' > java/target/$(ROCKSDB_JAVA_POM_ARTIFACT).sha1
+
+rocksdbjavastaticpublishbundle: rocksdbjavastaticfatjar rocksdbjavastaticpreparepomartifact
+	rm -rf $(ROCKSDB_JAVA_PUBLISH_REPOSITORY_DIR)
+	mkdir -p $(ROCKSDB_JAVA_PUBLISH_BUNDLE_DIR)
+	@set -e; \
+	for artifact in $(ROCKSDB_JAVA_RELEASE_ARTIFACTS); do \
+		rm -f "$$artifact.asc" "$$artifact.md5" "$$artifact.sha1" "$$artifact.asc.md5" "$$artifact.asc.sha1"; \
+		gpg --yes -ab "$$artifact"; \
+		openssl md5 "$$artifact" | sed 's/.*= \([0-9a-f]*\)/\1/' > "$$artifact.md5"; \
+		openssl sha1 "$$artifact" | sed 's/.*= \([0-9a-f]*\)/\1/' > "$$artifact.sha1"; \
+		openssl md5 "$$artifact.asc" | sed 's/.*= \([0-9a-f]*\)/\1/' > "$$artifact.asc.md5"; \
+		openssl sha1 "$$artifact.asc" | sed 's/.*= \([0-9a-f]*\)/\1/' > "$$artifact.asc.sha1"; \
+		cp "$$artifact" "$$artifact.asc" "$$artifact.md5" "$$artifact.sha1" "$$artifact.asc.md5" "$$artifact.asc.sha1" "$(ROCKSDB_JAVA_PUBLISH_BUNDLE_DIR)/"; \
+	done
+
+rocksdbjavastaticpublish: rocksdbjavastaticpublishbundle rocksdbjavastaticpublishcentral
+
+rocksdbjavastaticpublishdocker: rocksdbjavastaticpublishbundle rocksdbjavastaticpublishcentral
 
 rocksdbjavastaticpublishcentral: rocksdbjavageneratepom
-	mvn gpg:sign-and-deploy-file -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging -DpomFile=java/pom.xml -Dfile=java/target/rocksdbjni-$(ROCKSDB_JAVA_VERSION).jar
-	$(foreach classifier, $(ROCKSDB_JAVA_RELEASE_CLASSIFIERS), mvn gpg:sign-and-deploy-file -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging -DpomFile=java/pom.xml -Dfile=java/target/rocksdbjni-$(ROCKSDB_JAVA_VERSION)-$(classifier).jar -Dclassifier=$(classifier);)
+	mvn gpg:sign-and-deploy-file -Durl=https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/ -DrepositoryId=central -DpomFile=java/pom.xml -Dfile=java/target/rocksdbjni-$(ROCKSDB_JAVA_VERSION).jar
+	$(foreach classifier, $(ROCKSDB_JAVA_RELEASE_CLASSIFIERS), mvn gpg:sign-and-deploy-file -Durl=https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/ -DrepositoryId=central -DpomFile=java/pom.xml -Dfile=java/target/rocksdbjni-$(ROCKSDB_JAVA_VERSION)-$(classifier).jar -Dclassifier=$(classifier);)
 
 rocksdbjavageneratepom:
 	cd java;cat pom.xml.template | sed 's/\$${ROCKSDB_JAVA_VERSION}/$(ROCKSDB_JAVA_VERSION)/' > pom.xml
@@ -2434,13 +2616,17 @@ rocksdbjavastaticnexusbundlejar: rocksdbjavageneratepom
 jl/%.o: %.cc
 	$(AM_V_CC)mkdir -p $(@D) && $(CXX) $(CXXFLAGS) -fPIC -c $< -o $@ $(COVERAGEFLAGS)
 
+$(JNI_NATIVE_OBJECT_DIR)/%.o: %.cc
+	$(AM_V_CC)mkdir -p $(@D) && $(CXX) $(CXXFLAGS) $(JNI_NATIVE_INCLUDE_FLAGS) -fPIC -c $< -o $@ $(COVERAGEFLAGS)
+
 rocksdbjava: $(LIB_OBJECTS)
 ifeq ($(JAVA_HOME),)
 	$(error JAVA_HOME is not set)
 endif
 	$(AM_V_GEN)cd java; $(MAKE) javalib;
+	$(AM_V_at)$(MAKE) $(JNI_NATIVE_OBJECTS)
 	$(AM_V_at)rm -f ./java/target/$(ROCKSDBJNILIB)
-	$(AM_V_at)$(CXX) $(CXXFLAGS) -I./java/. -I./java/rocksjni $(JAVA_INCLUDE) $(ROCKSDB_PLUGIN_JNI_CXX_INCLUDEFLAGS) -shared -fPIC -o ./java/target/$(ROCKSDBJNILIB) $(ALL_JNI_NATIVE_SOURCES) $(LIB_OBJECTS) $(JAVA_LDFLAGS) $(COVERAGEFLAGS)
+	$(AM_V_at)$(CXX) $(CXXFLAGS) -shared -fPIC -o ./java/target/$(ROCKSDBJNILIB) $(JNI_NATIVE_OBJECTS) $(LIB_OBJECTS) $(JAVA_LDFLAGS) $(COVERAGEFLAGS)
 	$(AM_V_at)cd java; $(JAR_CMD) -cf target/$(ROCKSDB_JAR) HISTORY*.md
 	$(AM_V_at)cd java/target; $(JAR_CMD) -uf $(ROCKSDB_JAR) $(ROCKSDBJNILIB)
 	$(AM_V_at)cd java/target/classes; $(JAR_CMD) -uf ../$(ROCKSDB_JAR) org/rocksdb/*.class org/rocksdb/util/*.class

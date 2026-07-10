@@ -848,6 +848,7 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     set_target_properties(
             ${ROCKSDBJNI_STATIC_LIB}
             PROPERTIES
+            PREFIX ""
             OUTPUT_NAME librocksdbjni-win${bitness}
     )
     set(ROCKSDB_JAR rocksdbjni-${CMAKE_PROJECT_VERSION}-win${bitness}.jar)

@@ -102,3 +102,13 @@ cmake-build-*
 third-party/folly/
 .cache
 *.sublime-*
+
+#artifact-scan/
+#build-mingw/
+build-mingw-local/
+java/target*
+bzip2-*
+lz4-*
+snappy-*
+zlib-*
+zstd-*
