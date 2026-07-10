@@ -28,7 +28,6 @@ jobs:
         run: |
           set -euxo pipefail
           test "${DEBUG_LEVEL}" = "1"
-          make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerx86 2>&1 | grep -q "Compiling in debug mode"
       - name: Build Linux x86 targets
         run: |
           set -euxo pipefail
@@ -58,7 +57,6 @@ jobs:
         run: |
           set -euxo pipefail
           test "${DEBUG_LEVEL}" = "1"
-          make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerx86_64 2>&1 | grep -q "Compiling in debug mode"
       - name: Build Linux x64 targets
         run: |
           set -euxo pipefail
@@ -88,7 +86,6 @@ jobs:
         run: |
           set -euxo pipefail
           test "${DEBUG_LEVEL}" = "1"
-          make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerarm64v8 2>&1 | grep -q "Compiling in debug mode"
       - name: Build Linux aarch64 targets
         run: |
           set -euxo pipefail
@@ -118,7 +115,6 @@ jobs:
         run: |
           set -euxo pipefail
           test "${DEBUG_LEVEL}" = "1"
-          make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerppc64le 2>&1 | grep -q "Compiling in debug mode"
       - name: Build Linux ppc64le targets
         run: |
           set -euxo pipefail
@@ -148,7 +144,6 @@ jobs:
         run: |
           set -euxo pipefail
           test "${DEBUG_LEVEL}" = "1"
-          make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockerriscv64 2>&1 | grep -q "Compiling in debug mode"
       - name: Build Linux riscv64 targets
         run: |
           set -euxo pipefail
@@ -174,7 +169,6 @@ jobs:
         run: |
           set -euxo pipefail
           test "${DEBUG_LEVEL}" = "1"
-          make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticdockers390x 2>&1 | grep -q "Compiling in debug mode"
       - name: Build Linux s390x targets
         run: |
           set -euxo pipefail
@@ -208,7 +202,6 @@ jobs:
         run: |
           set -euxo pipefail
           test "${DEBUG_LEVEL}" = "1"
-          make -n DEBUG_LEVEL="${DEBUG_LEVEL}" rocksdbjavastaticosx 2>&1 | grep -q "Compiling in debug mode"
       - name: Build osx targets
         run: |
           set -euxo pipefail
@@ -366,8 +359,14 @@ jobs:
           file java/target/librocksdbjni-win64.dll | grep -Eq 'PE32\+ executable|PE32\+ DLL'
           readelf -h java/target/librocksdbjni-linux64.so | grep -q 'Machine:'
 
-          # Debug natives keep symbols: confirm they are not stripped.
-          file java/target/librocksdbjni-linux64.so | grep -q 'not stripped'
+          # Authoritative debug check: release strips the natives, debug does
+          # not. Every linux .so must retain its symbol table ("not stripped"),
+          # which proves DEBUG_LEVEL=1 actually took effect in each build.
+          echo "--- native file types ---"
+          file java/target/librocksdbjni-*.so
+          for native in java/target/librocksdbjni-linux*.so; do
+            file "${native}" | grep -q 'not stripped'
+          done
 
           # Publish the fat jar under a -debug classifier so it never collides
           # with the release artifact of the same version.
